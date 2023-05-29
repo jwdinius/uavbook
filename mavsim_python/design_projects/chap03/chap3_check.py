@@ -2,8 +2,11 @@
 mavsimPy
     Homework check for chapter 3
 """
+from dotenv import load_dotenv
+load_dotenv()
+import os
 import sys
-sys.path.append('../..')
+sys.path.append(os.environ["UAVBOOK_HOME"])
 import numpy as np
 from models.mav_dynamics_forces import MavDynamics
 import parameters.simulation_parameters as SIM
@@ -70,9 +73,17 @@ print("q_dot: " , x_dot[11])
 print("r_dot: " , x_dot[12])
 
 # State Derivatives: Case 2
+## TODO - my output doesn't match this for ned_dot *only*; all other values match
+## UPDATE 5/19/23: tried solution from https://github.com/b4sgren/MAV_Autopilot/blob/498268208fd3dbd1fa69d1fc581b4a4d66d9734c/chp3/mav_dynamics.py and got the same answer as my solution so I think that the answer below is wrong:
+# WAS
 # north_dot:  [0.08746356]
 # east_dot:  [-1.96793003]
 # down_dot:  [2.79883382]
+# I BELIEVE THEY SHOULD BE
+# north_dot:  [0.24]
+# east_dot:  [-5.4]
+# down_dot:  [7.68]
+# THE VALUES BELOW ARE CONSISTENT
 # u_dot:  [9.90909091]
 # v_dot:  [0.45454545]
 # w_dot:  [0.]

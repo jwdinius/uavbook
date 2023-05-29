@@ -36,6 +36,7 @@ Jx = 0.8244 #kg m^2
 Jy = 1.135
 Jz = 1.759
 Jxz = 0.1204
+#Jxz = 0  # for ch3 exercise
 S_wing = 0.55
 b = 2.8956
 c = 0.18994

@@ -6,8 +6,11 @@ mavsimPy
         1/17/2019 - RWB
         1/5/2023 - DLC
 """
+from dotenv import load_dotenv
+load_dotenv()
+import os
 import sys
-sys.path.append('../..')
+sys.path.append(os.environ["UAVBOOK_HOME"])
 import numpy as np
 import pyqtgraph as pg
 import parameters.simulation_parameters as SIM
@@ -54,7 +57,7 @@ while sim_time < end_time:
     # ------- vary forces and moments to check dynamics -------------
     fx = 0  # 10
     fy = 0  # 10
-    fz = 100  # 10
+    fz = 0  # 10
     Mx = 0.1  # 0.1
     My = 0  # 0.1
     Mz = 0  # 0.1
