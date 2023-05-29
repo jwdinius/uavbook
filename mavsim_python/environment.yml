@@ -2,16 +2,18 @@ name: uavbook
 channels:
     - conda-forge
 dependencies:
-    - python=3.7
+    - python=3.10
     - pip
-    - numpy=1.16
+    - numpy
     - matplotlib
     - jupyter
     - scipy
-    - opencv=4.2.0
+    - opencv
     - pillow
     - pip:
         - pyqtgraph
         - pyqt6
-        - pyopengl
+        - PyOpenGL
+        - PyOpenGL_accelerate
         - pynput
+        - python-dotenv
