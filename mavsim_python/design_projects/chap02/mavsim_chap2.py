@@ -6,8 +6,11 @@ mavsimPy
         1/17/2019 - RWB
         1/5/2023 - DLC
 """
+from dotenv import load_dotenv
+load_dotenv()
+import os
 import sys
-sys.path.append('../..')
+sys.path.append(os.environ["UAVBOOK_HOME"])
 import pyqtgraph as pg
 import parameters.simulation_parameters as SIM
 from viewers.mav_viewer import MavViewer
@@ -16,6 +19,7 @@ from tools.quit_listener import QuitListener
 
 quitter = QuitListener()
 
+# doesn't work, use kazam or similar
 VIDEO = False
 if VIDEO is True:
     from viewers.video_writer import VideoWriter

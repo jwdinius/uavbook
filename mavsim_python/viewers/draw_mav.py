@@ -88,15 +88,58 @@ class DrawMav:
         """
         ##### TODO #####
         # define MAV body parameters
-        #fuse_h = 
+        '''
+        vehicle is paramaterized by:
+        fuse_l1 - length from front of wing to front tip
+        fuse_l2 - length from front of wing to front taper point; distance from taper point to tip is fuse_l1-fuse_l2
+        fuse_l3 - length from front of wing to rear tip of vehicle
+        fuse_h - height of fuselage (at its tallest point)
+        fuse_w - width of fuselage (at its widest point)
+        wing_l - length from back to front of wing
+        wing_w - width of wing
+        tailwing_l - length of tailwing
+        tailwing_w - width of tailwing
+        tail_h - height of the tail assembly
+        
+        origin of body NED is centered on the front of the wing and dropped (by fuse_h/2) into the center of the fuselage at that point
+        '''
+        fuse_l2 = 0.4
+        fuse_l1 = 1.5 * fuse_l2
+        fuse_l3 = 3 * fuse_l1
+        fuse_w = fuse_l2
+        fuse_h = fuse_w
+        wing_l = fuse_l1
+        wing_w = 4 * wing_l
+        tailwing_l = 0.6 * wing_l
+        tailwing_w = 2.5 * tailwing_l
+        tail_h = 1.2 * fuse_h
+        # exterior points (in body NED)
+        # points map to index in XYZ data structure
+        points = np.array([[fuse_l1, 0., 0.],
+                           [fuse_l2,  0.5*fuse_w, -0.5*fuse_h],
+                           [fuse_l2, -0.5*fuse_w, -0.5*fuse_h],
+                           [fuse_l2, -0.5*fuse_w,  0.5*fuse_h],
+                           [fuse_l2,  0.5*fuse_w,  0.5*fuse_h],
+                           [-fuse_l3, 0., 0.], # fuselage
+                           [0., 0.5*wing_w, 0.],
+                           [-wing_l, 0.5*wing_w, 0.],
+                           [-wing_l, -0.5*wing_w, 0.],
+                           [0., -0.5*wing_w, 0.], # wing
+                           [-fuse_l3+tailwing_l, 0.5*tailwing_w, 0.],
+                           [-fuse_l3, 0.5*tailwing_w, 0.],
+                           [-fuse_l3, -0.5*tailwing_w, 0.],
+                           [-fuse_l3+tailwing_l, -0.5*tailwing_w, 0.], # tailwing
+                           [-fuse_l3 + tailwing_l, 0., 0.],
+                           [-fuse_l3, 0., -tail_h] # tail
+                           ]).T
 
         # Define the points on the aircraft following diagram Fig 2.14
         # points are in NED coordinates
         ##### TODO #####
-        points = np.array([[0, 0, 0],  # point 1 [0]
-                           [1, 1, 1],  # point 2 [1]
-                           [1, 1, 0],  # point 3 [2]
-                           ]).T
+        #points = np.array([[0, 0, 0],  # point 1 [0]
+        #                   [1, 1, 1],  # point 2 [1]
+        #                   [1, 1, 0],  # point 3 [2]
+        #                   ]).T
 
         # scale points for better rendering
         scale = 20
@@ -111,7 +154,7 @@ class DrawMav:
 
         # Assign colors for each mesh section
         ##### TODO #####
-        meshColors[0] = yellow # nose-top
+        meshColors[:] = yellow # nose-top
 
         return points, meshColors
 
@@ -125,6 +168,21 @@ class DrawMav:
 
         #Define each section of the mesh with 3 points
         ##### TODO #####
-        mesh = np.array([[points[0], points[1], points[2]]]) # nose-top
-
+        #mesh = np.array([[points[0], points[1], points[2]]]) # nose-top
+        mesh = np.array([
+            [points[2], points[1], points[0]],
+            [points[3], points[2], points[0]],
+            [points[4], points[3], points[0]],
+            [points[0], points[1], points[4]],
+            [points[1], points[2], points[5]],
+            [points[2], points[3], points[5]],
+            [points[3], points[4], points[5]],
+            [points[5], points[4], points[1]],  # fuselage
+            [points[6], points[9], points[8]],
+            [points[8], points[7], points[6]],  # wing
+            [points[10], points[13], points[12]],
+            [points[12], points[11], points[10]],  # tailwing
+            [points[14], points[15], points[5]]   # tail
+        ])
+        
         return mesh
