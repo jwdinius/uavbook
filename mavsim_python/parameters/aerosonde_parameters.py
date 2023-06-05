@@ -107,13 +107,19 @@ i0 = 1.5                     # no-load (zero-torque) current (A)
 ncells = 12.
 V_max = 3.7 * ncells  # max voltage for specified number of battery cells
 
-# Coeffiecients from prop_data fit
+# Coefficients from prop_data fit
 C_Q2 = -0.01664
 C_Q1 = 0.004970
 C_Q0 = 0.005230
 C_T2 = -0.1079
 C_T1 = -0.06044
 C_T0 = 0.09357
+
+# XXX (JWD) added from book's Appendix (E.2)
+k_motor = 80
+k_T_p = 0
+k_omega = 0
+C_prop = 1.0
 
 ######################################################################################
                 #   Calculation Variables

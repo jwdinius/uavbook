@@ -1,5 +1,8 @@
+from dotenv import load_dotenv
+load_dotenv()
+import os
 import sys
-sys.path.append('../..')
+sys.path.append(os.environ["UAVBOOK_HOME"])
 import numpy as np
 import parameters.simulation_parameters as SIM
 from models.mav_dynamics_control import MavDynamics
@@ -7,7 +10,7 @@ from message_types.msg_delta import MsgDelta
 from models.wind_simulation import WindSimulation
 
 wind = WindSimulation(SIM.ts_simulation)
-mav = MavDynamics(SIM.ts_simulation)
+mav = MavDynamics(SIM.ts_simulation, debug=True)
 
 delta = MsgDelta()
 delta.elevator = -0.2
@@ -15,7 +18,7 @@ delta.aileron = 0.0
 delta.rudder = 0.005
 delta.throttle = 0.5
 
-T_p, Q_p = mav._motor_thrust_torque(mav._Va, delta.throttle)
+T_p, Q_p = mav._motor_thrust_torque(delta.throttle)
 print("Propeller Forces and Torque", "\n")
 print("T_p: " , T_p)
 print("Q_p: " , Q_p, "\n\n")
@@ -66,7 +69,7 @@ mav._state = np.array([[ 6.19506532e+01],
  [ 1.68736005e-01],
  [ 1.71797313e-01]])
 
-T_p, Q_p = mav._motor_thrust_torque(mav._Va, delta.throttle)
+T_p, Q_p = mav._motor_thrust_torque(delta.throttle)
 print("Propeller Forces and Torque", "\n")
 print("T_p: " , T_p)
 print("Q_p: " , Q_p, "\n\n")
@@ -111,7 +114,7 @@ print("Va: ", mav._Va)
 print("alpha: ", mav._alpha)
 print("beta: ", mav._beta , "\n\n")
 
-T_p, Q_p = mav._motor_thrust_torque(mav._Va, delta.throttle)
+T_p, Q_p = mav._motor_thrust_torque(delta.throttle)
 print("Propeller Forces and Torque", "\n")
 print("T_p: " , T_p)
 print("Q_p: " , Q_p, "\n\n")
@@ -147,7 +150,7 @@ print("    r_dt: ", x_dot.item(12) , "\n\n\n")
 # Propeller Forces and Torque 
 
 # T_p:  -12.43072534597213
-# Q_p:  -0.49879620097737787 
+# Q_p:  -0.49879620097737787
 
 
 # Forces and Moments : Case 1 

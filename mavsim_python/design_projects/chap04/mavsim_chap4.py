@@ -5,8 +5,12 @@ mavsimPy
         12/27/2018 - RWB
         1/17/2019 - RWB
 """
+from dotenv import load_dotenv
+load_dotenv()
+import os
 import sys
-sys.path.append('../..')
+sys.path.append(os.environ["UAVBOOK_HOME"])
+import numpy as np
 import pyqtgraph as pg
 import parameters.simulation_parameters as SIM
 from models.mav_dynamics_control import MavDynamics
@@ -40,7 +44,7 @@ if PLOTS:
                            data_recording_period=SIM.ts_plot_record_data, time_window_length=30)
 
 # initialize elements of the architecture
-wind = WindSimulation(SIM.ts_simulation)
+wind = WindSimulation(SIM.ts_simulation, steady_state = np.array([[5., 0., 0.]]).T)
 mav = MavDynamics(SIM.ts_simulation)
 delta = MsgDelta()
 
@@ -59,7 +63,7 @@ while sim_time < end_time:
     delta.throttle = 0.6768
 
     # ------- physical system -------------
-    current_wind = wind.update()  # get the new wind vector
+    current_wind = wind.update(mav.true_state.altitude, mav.true_state.Va)  # get the new wind vector
     mav.update(delta, current_wind)  # propagate the MAV dynamics
 
     # -------update viewer-------------
