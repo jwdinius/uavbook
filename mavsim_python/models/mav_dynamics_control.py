@@ -301,7 +301,7 @@ class MavDynamics:
         if self._debug:
             Fp, Qp = self.calcThrustForceAndMoment(delta.throttle)
             assert np.isclose(Fp, thrust_prop)
-            assert np.isclose(Qp, torque_prop)
+            assert np.isclose(-Qp, torque_prop)  # XXX(jwd) I think there is a sign error here
 
         # compute longitudinal forces and moments in the body frame
         fa_x, fa_z, my = self._calc_longitudinal_forces_and_moments(delta)
@@ -355,10 +355,10 @@ class MavDynamics:
             n = Omega_op /(2 * np.pi)
 
             thrust_prop = MAV.rho * n**2 * MAV.D_prop**4 * C_T
-            torque_prop = MAV.rho * n**2 * MAV.D_prop**5 * C_Q  # XXX adding minus sign like in the book has the wrong sign compared to chap4_check output (?)
+            torque_prop = -MAV.rho * n**2 * MAV.D_prop**5 * C_Q  # XXX adding minus sign like in the book has the wrong sign compared to chap4_check output (?)
         else:
             thrust_prop = 0.5 * MAV.rho * MAV.S_prop * MAV.C_prop * ( (MAV.k_motor * delta_t)**2 - self._Va**2 ) 
-            torque_prop = MAV.k_T_p * (MAV.k_omega * delta.throttle)**2
+            torque_prop = -MAV.k_T_p * (MAV.k_omega * delta.throttle)**2
 
         return thrust_prop, torque_prop
 

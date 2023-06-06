@@ -146,6 +146,9 @@ print("    r_dt: ", x_dot.item(12) , "\n\n\n")
 
 
 # These outputs are results using the default parameters from the imported parameter files
+# XXX(jwd) there is a sign error in the propeller torques.  Once the error is fixed, all other values for
+# the forces, moments, and state derivatives match.  Could the reference implementation be subtracting the value
+# from the total Mx (==l) moment instead of adding?
 
 # Propeller Forces and Torque 
 
@@ -158,7 +161,7 @@ print("    r_dt: ", x_dot.item(12) , "\n\n\n")
 # fx:  -12.109717001006562
 # fy:  0.20707328125000002
 # fz:  63.44373750624077
-# Mx:  0.5063701133123779
+# Mx:  0.5063701133123779  # XXX(jwd) this answer is returned only if the sign on the propeller torque above is reversed
 # My:  8.75643373378125
 # Mz:  -0.21774997963125006 
 
