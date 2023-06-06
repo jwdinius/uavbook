@@ -16,7 +16,7 @@ state = np.array([[5], [2], [-20], [5],
                         [0], [0], [1], [0], [0],
                         [0], [1], [0.5], [0], [0], [0]])
 forces_moments = np.array([[10, 5, 0, 0, 14, 0]]).T
-mav = MavDynamics(SIM.ts_simulation)
+mav = MavDynamics(SIM.ts_simulation, debug=True)
 x_dot = mav._derivatives(state, forces_moments)
 
 print("State Derivatives: Case 1")
@@ -74,7 +74,7 @@ print("r_dot: " , x_dot[12])
 
 # State Derivatives: Case 2
 ## TODO - my output doesn't match this for ned_dot *only*; all other values match
-## UPDATE 5/19/23: tried solution from https://github.com/b4sgren/MAV_Autopilot/blob/498268208fd3dbd1fa69d1fc581b4a4d66d9734c/chp3/mav_dynamics.py and got the same answer as my solution so I think that the answer below is wrong:
+## UPDATE 5/19/23: tried solution from https://github.com/b4sgren/MAV_Autopilot/blob/498268208fd3dbd1fa69d1fc581b4a4d66d9734c/chp3/mav_dynamics.py and got the same answer as my solution (set debug=True to assert that my output matches that repo's solution) so I think that the answer below is wrong:
 # WAS
 # north_dot:  [0.08746356]
 # east_dot:  [-1.96793003]
