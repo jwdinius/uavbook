@@ -1,5 +1,8 @@
+from dotenv import load_dotenv
+load_dotenv()
+import os
 import sys
-sys.path.append('../..')
+sys.path.append(os.environ["UAVBOOK_HOME"])
 import numpy as np
 from models.mav_dynamics_control import MavDynamics
 from models.compute_models import compute_ss_model, compute_tf_model, euler_state, quaternion_state, f_euler, df_dx, df_du, dT_dVa, dT_ddelta_t
@@ -7,6 +10,7 @@ import parameters.simulation_parameters as SIM
 from message_types.msg_delta import MsgDelta
 
 mav = MavDynamics(SIM.ts_simulation)
+#mav = MavDynamics(SIM.ts_simulation, use_lo_fi_thrust_model=True)  # XXX does not match values below
 
 trim_state = np.array([[0.000000, -0.000000, -100.000000, 24.968743, 0.000000, 1.249755, 0.999687, 0.000000, 0.025003, 0.000000, 0.000000, 0.000000, 0.000000]]).T
 trim_input = MsgDelta(elevator=-0.124778,
@@ -152,9 +156,9 @@ print("dT_ddelta_t_: " , dT_ddelta_t_, "\n")
 
 #    a_theta3:  -36.11239040790846 
 
-#        a_V1:  0.2817100013494505 
+#        a_V1:  0.2817100013494505  ## XXX can't match (0.28167979712189306, ~7e-5 rel error)
 
-#        a_V2:  8.20722086381344 
+#        a_V2:  8.20722086381344  ## XXX can't match (8.137144545171852, ~8e-3 rel error)
 
 #        a_V3:  9.809999999999892 
 

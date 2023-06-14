@@ -18,7 +18,7 @@ delta.aileron = 0.0
 delta.rudder = 0.005
 delta.throttle = 0.5
 
-T_p, Q_p = mav._motor_thrust_torque(delta.throttle)
+T_p, Q_p = mav._motor_thrust_torque(mav._Va, delta.throttle)
 print("Propeller Forces and Torque", "\n")
 print("T_p: " , T_p)
 print("Q_p: " , Q_p, "\n\n")
@@ -69,7 +69,7 @@ mav._state = np.array([[ 6.19506532e+01],
  [ 1.68736005e-01],
  [ 1.71797313e-01]])
 
-T_p, Q_p = mav._motor_thrust_torque(delta.throttle)
+T_p, Q_p = mav._motor_thrust_torque(mav._Va, delta.throttle)
 print("Propeller Forces and Torque", "\n")
 print("T_p: " , T_p)
 print("Q_p: " , Q_p, "\n\n")
@@ -114,7 +114,7 @@ print("Va: ", mav._Va)
 print("alpha: ", mav._alpha)
 print("beta: ", mav._beta , "\n\n")
 
-T_p, Q_p = mav._motor_thrust_torque(delta.throttle)
+T_p, Q_p = mav._motor_thrust_torque(mav._Va, delta.throttle)
 print("Propeller Forces and Torque", "\n")
 print("T_p: " , T_p)
 print("Q_p: " , Q_p, "\n\n")

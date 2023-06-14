@@ -17,6 +17,12 @@ from message_types.msg_delta import MsgDelta
 def compute_model(mav, trim_state, trim_input):
     # Note: this function alters the mav private variables
     A_lon, B_lon, A_lat, B_lat = compute_ss_model(mav, trim_state, trim_input)
+    # compute eigenvalues of A_lat and A_lon
+    lon_eigvals, _ = np.linalg.eig(A_lon)
+    icsi_lon0, wn_lon0 = convert_complex_conj_pair(lon_eigvals[1], lon_eigvals[2])
+    icsi_lon1, wn_lon1 = convert_complex_conj_pair(lon_eigvals[3], lon_eigvals[4])
+    lat_eigvals, _ = np.linalg.eig(A_lat)
+    icsi_lat, wn_lat = convert_complex_conj_pair(lat_eigvals[3], lat_eigvals[4])
     Va_trim, alpha_trim, theta_trim, a_phi1, a_phi2, a_theta1, a_theta2, a_theta3, \
     a_V1, a_V2, a_V3 = compute_tf_model(mav, trim_state, trim_input)
 
@@ -51,6 +57,12 @@ def compute_model(mav, trim_state, trim_input):
      A_lon[2][0], A_lon[2][1], A_lon[2][2], A_lon[2][3], A_lon[2][4],
      A_lon[3][0], A_lon[3][1], A_lon[3][2], A_lon[3][3], A_lon[3][4],
      A_lon[4][0], A_lon[4][1], A_lon[4][2], A_lon[4][3], A_lon[4][4]))
+    file.write('#A_lon_eigvals = np.array([%f + %f * j, %f + %f * j, %f + %f * j, %f + %f * j, %f + %f * j])\n' % \
+               (np.real(lon_eigvals[0]), np.imag(lon_eigvals[0]), np.real(lon_eigvals[1]), np.imag(lon_eigvals[1]), \
+                np.real(lon_eigvals[2]), np.imag(lon_eigvals[2]), np.real(lon_eigvals[3]), np.imag(lon_eigvals[3]), \
+                np.real(lon_eigvals[4]), np.imag(lon_eigvals[4])))
+    file.write(f'#A_lon_mode_1: \icsi = {icsi_lon0}, \w_n = {wn_lon0}\n')
+    file.write(f'#A_lon_mode_2: \icsi = {icsi_lon1}, \w_n = {wn_lon1}\n')
     file.write('B_lon = np.array([\n    [%f, %f],\n    '
                '[%f, %f],\n    '
                '[%f, %f],\n    '
@@ -71,6 +83,11 @@ def compute_model(mav, trim_state, trim_input):
      A_lat[2][0], A_lat[2][1], A_lat[2][2], A_lat[2][3], A_lat[2][4],
      A_lat[3][0], A_lat[3][1], A_lat[3][2], A_lat[3][3], A_lat[3][4],
      A_lat[4][0], A_lat[4][1], A_lat[4][2], A_lat[4][3], A_lat[4][4]))
+    file.write('#A_lat_eigvals = np.array([%f + %f * j, %f + %f * j, %f + %f * j, %f + %f * j, %f + %f * j])\n' % \
+               (np.real(lat_eigvals[0]), np.imag(lat_eigvals[0]), np.real(lat_eigvals[1]), np.imag(lat_eigvals[1]), \
+                np.real(lat_eigvals[2]), np.imag(lat_eigvals[2]), np.real(lat_eigvals[3]), np.imag(lat_eigvals[3]), \
+                np.real(lat_eigvals[4]), np.imag(lat_eigvals[4])))
+    file.write(f'#A_lat_mode: \icsi = {icsi_lat}, \w_n = {wn_lat}\n')
     file.write('B_lat = np.array([\n    [%f, %f],\n    '
                '[%f, %f],\n    '
                '[%f, %f],\n    '
@@ -95,16 +112,20 @@ def compute_tf_model(mav, trim_state, trim_input):
 
     ###### TODO ######
     # define transfer function constants
-    a_phi1 = 0
-    a_phi2 = 0
-    a_theta1 = 0
-    a_theta2 = 0
-    a_theta3 = 0
+    common_aero_scaling_phi = 0.5 * MAV.rho * Va_trim**2 * MAV.S_wing * MAV.b
+    a_phi1 = -0.5 * common_aero_scaling_phi * MAV.C_p_p * MAV.b / Va_trim
+    a_phi2 = common_aero_scaling_phi * MAV.C_p_delta_a
+    common_aero_scaling_theta = 0.5 * MAV.rho * Va_trim**2 * MAV.S_wing * MAV.c / MAV.Jy
+    a_theta1 = -0.5 * common_aero_scaling_theta * MAV.C_m_q * MAV.c / Va_trim
+    a_theta2 = -common_aero_scaling_theta * MAV.C_m_alpha
+    a_theta3 = common_aero_scaling_theta * MAV.C_m_delta_e
 
     # Compute transfer function coefficients using new propulsion model
-    a_V1 = 0
-    a_V2 = 0
-    a_V3 = 0
+    common_aero_scaling_theta = 0.5 * MAV.rho * Va_trim**2 * MAV.S_wing * MAV.c / MAV.Jy
+    a_V1 = MAV.rho * Va_trim * MAV.S_wing / MAV.mass * (MAV.C_D_0 + MAV.C_D_alpha * alpha_trim + MAV.C_D_delta_e * trim_input.elevator) \
+        - dT_dVa(mav, Va_trim, trim_input.throttle) / MAV.mass
+    a_V2 = dT_ddelta_t(mav, Va_trim, trim_input.throttle) / MAV.mass 
+    a_V3 = MAV.gravity * np.cos(theta_trim - alpha_trim)
 
     return Va_trim, alpha_trim, theta_trim, a_phi1, a_phi2, a_theta1, a_theta2, a_theta3, a_V1, a_V2, a_V3
 
@@ -116,13 +137,35 @@ def compute_ss_model(mav, trim_state, trim_input):
     A = df_dx(mav, x_euler, trim_input)
     B = df_du(mav, x_euler, trim_input)
     # extract longitudinal states (u, w, q, theta, pd)
-    A_lon = np.zeros((5,5))
-    B_lon = np.zeros((5,2))
+    # u is the 4th state, w is the 6th state, q is the 11th state, theta is the 8th state, h is (-) the 3rd state
+    A_lon = np.array([A[3, [3, 5, 10, 7, 2]],
+                      A[5, [3, 5, 10, 7, 2]],
+                      A[10, [3, 5, 10, 7, 2]],
+                      A[7, [3, 5, 10, 7, 2]],
+                      A[2, [3, 5, 10, 7, 2]]])
+    B_lon = np.array([B[3, [0, 3]],
+                      B[5, [0, 3]],
+                      B[10, [0, 3]],
+                      B[7, [0, 3]],
+                      B[2, [0, 3]]])
     # change pd to h
+    A_lon[-1, :-1] *= -1.
+    A_lon[:, -1] *= -1.
+    B_lon[-1, :] *= -1.
 
-    # extract lateral states (v, p, r, phi, psi)
-    A_lat = np.zeros((5,5))
-    B_lat = np.zeros((5,2))
+
+    # extract lateral states (v, p, r, phi, psii)
+    # v is the 5th state, p is the 10th state, r is the 12th state, phi is the 7th state, psi is the 9th state
+    A_lat = np.array([A[4, [4, 9, 11, 6, 8]],
+                      A[9, [4, 9, 11, 6, 8]],
+                      A[11, [4, 9, 11, 6, 8]],
+                      A[6, [4, 9, 11, 6, 8]],
+                      A[8, [4, 9, 11, 6, 8]]])
+    B_lat = np.array([B[4, [1, 2]],
+                      B[9, [1, 2]],
+                      B[11, [1, 2]],
+                      B[6, [1, 2]],
+                      B[8, [1, 2]]])
     return A_lon, B_lon, A_lat, B_lat
 
 def euler_state(x_quat):
@@ -130,7 +173,11 @@ def euler_state(x_quat):
     # to x_euler with attitude represented by Euler angles
     
     ##### TODO #####
+    euler = np.array(Quaternion2Euler(x_quat[6:10])).reshape((3, 1))
     x_euler = np.zeros((12,1))
+    x_euler[:6] = x_quat[:6]
+    x_euler[6:9] = euler
+    x_euler[9:] = x_quat[10:]
     return x_euler
 
 def quaternion_state(x_euler):
@@ -138,10 +185,14 @@ def quaternion_state(x_euler):
     # to x_quat with attitude represented by quaternions
 
     ##### TODO #####
+    quat = Euler2Quaternion(x_euler.item(6), x_euler.item(7), x_euler.item(8))
     x_quat = np.zeros((13,1))
+    x_quat[:6] = x_euler[:6]
+    x_quat[6:10] = quat
+    x_quat[10:] = x_euler[9:]
     return x_quat
 
-def f_euler(mav, x_euler, delta):
+def f_euler(mav, x_euler, delta, eps=0.001):
     # return 12x1 dynamics (as if state were Euler state)
     # compute f at euler_state, f_euler will be f, except for the attitude states
 
@@ -153,25 +204,53 @@ def f_euler(mav, x_euler, delta):
     mav._state = x_quat
     mav._update_velocity_data()
     ##### TODO #####
-    f_euler_ = np.zeros((12,1))
+    dEuler_dquat = dxe_dxq(x_quat, eps)
+    f_quat = mav._derivatives(x_quat, mav._forces_moments(delta))
 
-    return f_euler_
+    return dEuler_dquat @ f_quat
 
 def df_dx(mav, x_euler, delta):
     # take partial of f_euler with respect to x_euler
-    eps = 0.01  # deviation
+    eps = 0.001  # deviation
 
     ##### TODO #####
-    A = np.zeros((12, 12))  # Jacobian of f wrt x
+    A = np.zeros((12, 12))
+    for i in range(12):
+        for j in range(12):
+            elr_left = np.copy(x_euler)
+            elr_left[j, 0] -= eps
+            f_left = f_euler(mav, elr_left, delta, eps=eps)
+            elr_right = np.copy(x_euler)
+            elr_right[j, 0] += eps
+            f_right = f_euler(mav, elr_right, delta, eps=eps)
+            A[i, j] = (f_right.item(i) - f_left.item(i)) / (2. * eps)
     return A
 
 
 def df_du(mav, x_euler, delta):
     # take partial of f_euler with respect to input
-    eps = 0.01  # deviation
+    eps = 0.001  # deviation
 
     ##### TODO #####
-    B = np.zeros((12, 4))  # Jacobian of f wrt u
+    B = np.zeros((12, 4))
+    delta_vec = np.array([[delta.elevator], [delta.aileron], [delta.rudder], [delta.throttle]])
+    for i in range(12):
+        for j in range(4):
+            delta_vec_left = np.copy(delta_vec)
+            delta_vec_left[j, 0] -= eps
+            delta_left = MsgDelta(elevator=delta_vec_left.item(0),
+                                  aileron=delta_vec_left.item(1),
+                                  rudder=delta_vec_left.item(2),
+                                  throttle=delta_vec_left.item(3))
+            f_left = f_euler(mav, x_euler, delta_left, eps=eps)
+            delta_vec_right = np.copy(delta_vec)
+            delta_vec_right[j, 0] += eps
+            delta_right = MsgDelta(elevator=delta_vec_right.item(0),
+                                  aileron=delta_vec_right.item(1),
+                                  rudder=delta_vec_right.item(2),
+                                  throttle=delta_vec_right.item(3))
+            f_right = f_euler(mav, x_euler, delta_right, eps=eps)
+            B[i, j] = (f_right.item(i) - f_left.item(i)) / (2. * eps)
     return B
 
 
@@ -180,7 +259,10 @@ def dT_dVa(mav, Va, delta_t):
     eps = 0.01
 
     ##### TODO #####
-    dT_dVa = 0
+    T_left, _ = mav._motor_thrust_torque(Va - eps, delta_t)
+    T_right, _ = mav._motor_thrust_torque(Va + eps, delta_t)
+    # use (second-order) central difference method
+    dT_dVa = (T_right - T_left) / (2. * eps)
     return dT_dVa
 
 def dT_ddelta_t(mav, Va, delta_t):
@@ -188,5 +270,33 @@ def dT_ddelta_t(mav, Va, delta_t):
     eps = 0.01
 
     ##### TODO #####
-    dT_ddelta_t = 0
+    T_left, _ = mav._motor_thrust_torque(Va, delta_t - eps)
+    T_right, _ = mav._motor_thrust_torque(Va, delta_t + eps)
+    # use (second-order) central difference method
+    dT_ddelta_t = (T_right - T_left) / (2. * eps)
     return dT_ddelta_t
+
+def dxe_dxq(x_quat, eps):
+    # Jacobian of x_euler wrt x_quat: 12x13
+    T = np.zeros((12, 13))
+    T[:6, :6] = np.eye(6)
+    # 4x3 matrix in the middle
+    for i in range(6, 9):
+        for j in range(6, 10):
+            quat_left = np.copy(x_quat)
+            quat_left[j, 0] -= eps
+            elr_state_left = euler_state(quat_left)
+            quat_right = np.copy(x_quat)
+            quat_right[j, 0] += eps
+            elr_state_right = euler_state(quat_right)
+            T[i, j] = ( elr_state_right.item(i) - elr_state_left.item(i) ) / (2. * eps) 
+    T[9:, 10:] = np.eye(3)
+    return T
+
+def convert_complex_conj_pair(lmbda, lmbda_star):
+    # convert (s + \lambda)*(s + \lambda*) to s^2 + 2 * icsi * w_n * s + w_n**2
+    # -> 2 * icsi * w_n = 2 * Re(\lambda)
+    # -> w_n**2 = \lambda * \lambda* = |\lambda|**2
+    w_n = np.real(np.sqrt(lmbda*lmbda_star))
+    icsi = np.real(np.real(lmbda) / w_n)
+    return icsi, w_n

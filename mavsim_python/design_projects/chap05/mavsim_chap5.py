@@ -4,8 +4,11 @@ mavsim_python
     - Last Update:
         2/2/2019 - RWB
 """
+from dotenv import load_dotenv
+load_dotenv()
+import os
 import sys
-sys.path.append('../..')
+sys.path.append(os.environ["UAVBOOK_HOME"])
 import pyqtgraph as pg
 import numpy as np
 import parameters.simulation_parameters as SIM
@@ -24,7 +27,7 @@ VIDEO = False
 PLOTS = True
 ANIMATION = True
 SAVE_PLOT_IMAGE = False
-COMPUTE_MODEL = True
+COMPUTE_MODEL = False
 
 # video initialization
 if VIDEO is True:
@@ -49,7 +52,7 @@ mav = MavDynamics(SIM.ts_simulation)
 
 # use compute_trim function to compute trim state and trim input
 Va = 25.
-gamma = 0.*np.pi/180.
+gamma = 0 * np.pi/180.
 trim_state, trim_input = compute_trim(mav, Va, gamma)
 mav._state = trim_state  # set the initial state of the mav to the trim state
 delta = trim_input  # set input to constant constant trim input
@@ -75,7 +78,7 @@ print("Press 'Esc' to exit...")
 while sim_time < end_time:
 
     # -------physical system-------------
-    #current_wind = wind.update()  # get the new wind vector
+    #current_wind = wind.update(mav.true_state.Va, mav.true_state.altitude)  # get the new wind vector
     current_wind = np.zeros((6, 1))
     # this input excites the phugoid mode by adding an elevator impulse at t = 5.0 s
     # delta.elevator = delta_e_trim + input_signal.impulse(sim_time)

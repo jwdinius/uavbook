@@ -8,11 +8,12 @@ import sys
 sys.path.append('..')
 import numpy as np
 from scipy.optimize import minimize
-from tools.rotations import Euler2Quaternion
+from tools.rotations import Euler2Quaternion, Euler2Rotation
 from message_types.msg_delta import MsgDelta
+from models.mav_dynamics_control import MavDynamics 
 import time
 
-def compute_trim(mav, Va, gamma):
+def compute_trim(mav: MavDynamics, Va, gamma):
     # define initial state and input
 
     ##### TODO #####
@@ -20,18 +21,21 @@ def compute_trim(mav, Va, gamma):
     e0 = Euler2Quaternion(0., gamma, 0.)
     state0 = np.array([[0],  # pn
                    [0],  # pe
-                   [0],  # pd
-                   [0],  # u
+                   [-100],  # pd
+                   [Va],  # u
                    [0.], # v
                    [0.], # w
-                   [1],  # e0
-                   [0],  # e1
-                   [0],  # e2
-                   [0],  # e3
+                   [e0.item(0)],  # e0
+                   [e0.item(1)],  # e1
+                   [e0.item(2)],  # e2
+                   [e0.item(3)],  # e3
                    [0.], # p
                    [0.], # q
                    [0.]  # r
                    ])
+    mav._state = state0
+    mav._update_velocity_data()
+    mav._update_true_state()
     delta0 = np.array([[0],  # elevator
                        [0],  # aileron
                        [0],  # rudder
@@ -75,9 +79,33 @@ def compute_trim(mav, Va, gamma):
     print('trim_state=', trim_state.T)
     return trim_state, trim_input
 
-
-def trim_objective_fun(x, mav, Va, gamma):
+def trim_objective_fun(x, mav: MavDynamics, Va, gamma):
     # objective function to be minimized
+    state = x[:13]
+    inp = x[13:]
     ##### TODO #####
-    J = 0
+    # UPDATE mav._state so that forces and moments calculations are correct
+    mav._state = state.reshape((13, 1))
+    mav._update_velocity_data()
+    x_star_dot = np.array([[0],  # pn_dot, don't care
+                   [0],  # pe_dot, don't care
+                   [Va * np.sin(gamma)],  # pd_dot
+                   [0],  # u_dot
+                   [0.], # v_dot
+                   [0.], # w_dot
+                   [0.], # e0_dot
+                   [0.], # e1_dot
+                   [0.], # e2_dot
+                   [0.], # e3_dot
+                   [0.], # p_dot
+                   [0.], # q_dot
+                   [0.]  # r_dot
+                   ])
+    # "f" in this context comes from mav._derivatives method
+    delta = MsgDelta(elevator=inp[0],
+                     aileron=inp[1],
+                     rudder=inp[2],
+                     throttle=inp[3])
+    f_x_u = mav._derivatives(state, mav._forces_moments(delta))
+    J = np.linalg.norm(x_star_dot[2:] - f_x_u[2:])**2
     return J

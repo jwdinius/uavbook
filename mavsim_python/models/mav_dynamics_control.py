@@ -19,7 +19,7 @@ from message_types.msg_delta import MsgDelta
 import parameters.aerosonde_parameters as MAV
 from tools.rotations import Quaternion2Rotation, Quaternion2Euler, Euler2Rotation
 
-#XXX
+#XXX for benchmark
 from math import asin, exp
 
 class MavDynamics:
@@ -224,18 +224,6 @@ class MavDynamics:
         c = MAV.c
         de = delta.elevator
 
-        sigma_alpha = (1 + exp(-M * (alpha - alpha0)) + exp(M * (alpha + alpha0))) /\
-                      ((1 + exp(-M * (alpha - alpha0)))*(1 + exp(M * (alpha + alpha0))))
-        CL_alpha = (1 - sigma_alpha) * (MAV.C_L_0 + MAV.C_L_alpha * alpha) + \
-                    sigma_alpha * (2 * np.sign(alpha) * (np.sin(alpha)**2) * np.cos(alpha))
-
-        _F_lift = 0.5 * rho * (Va**2) * S * (CL_alpha + MAV.C_L_q * (c / (2 * Va)) * _q \
-                 + MAV.C_L_delta_e * de)
-        CD_alpha = MAV.C_D_p + ((MAV.C_L_0 + MAV.C_L_alpha * alpha)**2) / (np.pi * MAV.e * MAV.AR)
-
-        _F_drag = 0.5 * rho * (Va**2) * S * (CD_alpha + MAV.C_D_q * (c / (2 * Va)) * q \
-                 + MAV.C_D_delta_e * de)
-        #p, q, r = [self._state.item(i) for i in range(10, 13)]
         # compute Lift and Drag coefficients (CL, CD) (pgs. 47-48)
         ## Lift coefficient: C_L(\alpha)
         def sigma(alpha):
@@ -252,9 +240,7 @@ class MavDynamics:
         # compute Lift and Drag Forces (F_lift, F_drag)
         aero_force_scaling = 0.5 * MAV.rho * self._Va**2 * MAV.S_wing
         F_lift = aero_force_scaling * (C_L + 0.5 * MAV.C_L_q * MAV.c / self._Va * q + MAV.C_L_delta_e * delta.elevator) 
-        assert np.isclose(_F_lift, F_lift)
         F_drag = aero_force_scaling * (C_D + 0.5 * MAV.C_D_q * MAV.c / self._Va * q + MAV.C_D_delta_e * delta.elevator)
-        assert np.isclose(_F_drag, F_drag)
 
         # forces, moments = sum(gravity, aero, propeller)
         ca = np.cos(self._alpha)
@@ -297,7 +283,7 @@ class MavDynamics:
             assert np.isclose(fb_grav[2], fg_z)
 
         # propeller thrust and torque
-        thrust_prop, torque_prop = self._motor_thrust_torque(delta.throttle)
+        thrust_prop, torque_prop = self._motor_thrust_torque(self._Va, delta.throttle)
         if self._debug:
             Fp, Qp = self.calcThrustForceAndMoment(delta.throttle)
             assert np.isclose(Fp, thrust_prop)
@@ -329,7 +315,7 @@ class MavDynamics:
         forces_moments = np.array([[Fx, Fy, Fz, Mx, My, Mz]]).T
         return forces_moments
 
-    def _motor_thrust_torque(self, delta_t):
+    def _motor_thrust_torque(self, airspeed, delta_t):
         # compute thrust and torque due to propeller
         ##### TODO #####
         if not self._use_lo_fi_thrust_model:
@@ -340,14 +326,14 @@ class MavDynamics:
 
             # Angular speed of propeller (omega_p = ?)
             a = MAV.C_Q0 * MAV.rho * MAV.D_prop**5 / (2 * np.pi)**2
-            b = MAV.rho * MAV.D_prop**4 * MAV.C_Q1 * self._Va / (2 * np.pi)  + (MAV.KQ * MAV.KV) / MAV.R_motor
-            c = MAV.rho * MAV.D_prop**3 * MAV.C_Q2 * self._Va**2 - (MAV.KQ * V_in) / MAV.R_motor + MAV.KQ * MAV.i0
+            b = MAV.rho * MAV.D_prop**4 * MAV.C_Q1 * airspeed / (2 * np.pi)  + (MAV.KQ * MAV.KV) / MAV.R_motor
+            c = MAV.rho * MAV.D_prop**3 * MAV.C_Q2 * airspeed**2 - (MAV.KQ * V_in) / MAV.R_motor + MAV.KQ * MAV.i0
 
             # use the positive root
             Omega_op = (-b + np.sqrt(b**2 - 4 * a * c)) / (2 * a)
 
             # thrust and torque due to propeller
-            J_op = (2 * np.pi * self._Va) / (Omega_op * MAV.D_prop)
+            J_op = (2 * np.pi * airspeed) / (Omega_op * MAV.D_prop)
 
             C_T = MAV.C_T2 * J_op**2 + MAV.C_T1 * J_op + MAV.C_T0
             C_Q = MAV.C_Q2 * J_op**2 + MAV.C_Q1 * J_op + MAV.C_Q0
@@ -357,8 +343,8 @@ class MavDynamics:
             thrust_prop = MAV.rho * n**2 * MAV.D_prop**4 * C_T
             torque_prop = -MAV.rho * n**2 * MAV.D_prop**5 * C_Q  # XXX adding minus sign like in the book has the wrong sign compared to chap4_check output (?)
         else:
-            thrust_prop = 0.5 * MAV.rho * MAV.S_prop * MAV.C_prop * ( (MAV.k_motor * delta_t)**2 - self._Va**2 ) 
-            torque_prop = -MAV.k_T_p * (MAV.k_omega * delta.throttle)**2
+            thrust_prop = 0.5 * MAV.rho * MAV.S_prop * MAV.C_prop * ( (MAV.k_motor * delta_t)**2 - airspeed**2 ) 
+            torque_prop = -MAV.k_T_p * (MAV.k_omega * delta_t)**2
 
         return thrust_prop, torque_prop
 
