@@ -57,33 +57,57 @@ class Autopilot:
                         Ts=ts_control,
                         limit=1.0)
         self.commanded_state = MsgState()
+        self._trim_input = MsgDelta()
+
+    def set_trim_input(self, trim_input):
+        self._trim_input = trim_input
 
     def update(self, cmd, state):
-	
-	#### TODO #####
-        # lateral autopilot
-
-
-        # longitudinal autopilot
-
-
+        #### TODO #####
         # construct control outputs and commanded states
-        delta = MsgDelta(elevator=0,
-                         aileron=0,
-                         rudder=0,
-                         throttle=0)
-        self.commanded_state.altitude = 0
-        self.commanded_state.Va = 0
-        self.commanded_state.phi = 0
-        self.commanded_state.theta = 0
-        self.commanded_state.chi = 0
+        #delta = MsgDelta(elevator=0,
+        #                 aileron=0,
+        #                 rudder=0,
+        #                 throttle=0)
+        delta = self._trim_input
+
+        # lateral autopilot
+        chi_c = wrap(cmd.course_command, state.chi)
+        phi_c = self.saturate(  # why saturate when the controller will?
+            cmd.phi_feedforward + self.course_from_roll.update(chi_c, state.chi),
+            -np.radians(45),
+            np.radians(45)
+        )
+        delta.aileron = self.roll_from_aileron.update(phi_c, state.phi, state.p)
+        delta.rudder = self.yaw_damper.update(state.r)
+        
+        # longitudinal autopilot
+        h_c = self.saturate(
+            cmd.altitude_command,
+            state.altitude - AP.altitude_zone,
+            state.altitude + AP.altitude_zone
+        )
+        theta_c = self.altitude_from_pitch.update(h_c, state.altitude)
+        delta.elevator = self.pitch_from_elevator.update(theta_c, state.theta, state.q)
+        delta.throttle = self.saturate(
+            self.airspeed_from_throttle.update(cmd.airspeed_command, state.Va),
+            0,
+            1
+        )
+
+        self.commanded_state.altitude = cmd.altitude_command 
+        self.commanded_state.Va = cmd.airspeed_command
+        self.commanded_state.phi = phi_c
+        self.commanded_state.theta = theta_c
+        self.commanded_state.chi = cmd.course_command
+
         return delta, self.commanded_state
 
-    def saturate(self, input, low_limit, up_limit):
-        if input <= low_limit:
+    def saturate(self, _input, low_limit, up_limit):
+        if _input <= low_limit:
             output = low_limit
-        elif input >= up_limit:
+        elif _input >= up_limit:
             output = up_limit
         else:
-            output = input
+            output = _input
         return output
