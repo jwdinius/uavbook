@@ -123,16 +123,16 @@ class DataViewer:
         self._plotter.create_data_set(plot_id="bias", data_label="bz_e", data_color=estimate_color_3)
 
         # define fifth row
-        self._plotter.create_plot_widget(plot_id='delta_e', xlabel='Time (s)', ylabel='delta_e (deg)',
-                                       window_length=self._data_window_length)
         self._plotter.create_plot_widget(plot_id='delta_a', xlabel='Time (s)', ylabel='delta_a (deg)',
+                                       window_length=self._data_window_length)
+        self._plotter.create_plot_widget(plot_id='delta_e', xlabel='Time (s)', ylabel='delta_e (deg)',
                                        window_length=self._data_window_length)
         self._plotter.create_plot_widget(plot_id='delta_r', xlabel='Time (s)', ylabel='delta_r (deg)',
                                        window_length=self._data_window_length)
-        self._plotter.create_plot_widget(plot_id='delta_t', xlabel='Time (s)', ylabel='delta_t (deg)',
+        self._plotter.create_plot_widget(plot_id='delta_t', xlabel='Time (s)', ylabel='delta_t',
                                        window_length=self._data_window_length)
-        self._plotter.create_data_set(plot_id="delta_e", data_label="delta_e", data_color=control_color)
         self._plotter.create_data_set(plot_id="delta_a", data_label="delta_a", data_color=control_color)
+        self._plotter.create_data_set(plot_id="delta_e", data_label="delta_e", data_color=control_color)
         self._plotter.create_data_set(plot_id="delta_r", data_label="delta_r", data_color=control_color)
         self._plotter.create_data_set(plot_id="delta_t", data_label="delta_t", data_color=control_color)
         self._plotter.show_window()
@@ -200,10 +200,10 @@ class DataViewer:
             self._plotter.add_data_point(plot_id='bias', data_label='bz_e', xvalue=t, yvalue=self.__rad_to_deg(estimated_state.bz))
         #add control data
         if delta != None:
-            self._plotter.add_data_point(plot_id='delta_e', data_label='delta_e', xvalue=t, yvalue=self.__rad_to_deg(delta.elevator))
             self._plotter.add_data_point(plot_id='delta_a', data_label='delta_a', xvalue=t, yvalue=self.__rad_to_deg(delta.aileron))
+            self._plotter.add_data_point(plot_id='delta_e', data_label='delta_e', xvalue=t, yvalue=self.__rad_to_deg(delta.elevator))
             self._plotter.add_data_point(plot_id='delta_r', data_label='delta_r', xvalue=t, yvalue=self.__rad_to_deg(delta.rudder))
-            self._plotter.add_data_point(plot_id='delta_t', data_label='delta_t', xvalue=t, yvalue=self.__rad_to_deg(delta.throttle))
+            self._plotter.add_data_point(plot_id='delta_t', data_label='delta_t', xvalue=t, yvalue=delta.throttle)
 
     def process_app(self):
         self._plotter.process_app(0)
