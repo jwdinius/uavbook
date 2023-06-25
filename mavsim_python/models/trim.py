@@ -39,7 +39,7 @@ def compute_trim(mav: MavDynamics, Va, gamma):
     delta0 = np.array([[0],  # elevator
                        [0],  # aileron
                        [0],  # rudder
-                       [0]]) # throttle
+                       [0.5]]) # throttle
     x0 = np.concatenate((state0, delta0), axis=0)
     # define equality constraints
     cons = ({'type': 'eq',
@@ -63,7 +63,18 @@ def compute_trim(mav: MavDynamics, Va, gamma):
                                 [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0.],
                                 [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0.],
                                 ])
-             })
+             },
+             {'type': 'ineq',  # TODO add other actuator limits (currently only throttle is considered)
+              'fun': lambda x: np.array([
+                                x[16],  # delta_t >= 0
+                                1 - x[16],  # delta_t <= 1
+                                ]),
+             'jac': lambda x: np.array([
+                                [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 1.],
+                                [0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., -1.],
+                                ])
+             }
+            )
     # solve the minimization problem to find the trim states and inputs
 
     res = minimize(trim_objective_fun, x0, method='SLSQP', args=(mav, Va, gamma),
