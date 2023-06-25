@@ -326,7 +326,7 @@ class MavDynamics:
 
             # Angular speed of propeller (omega_p = ?)
             a = MAV.C_Q0 * MAV.rho * MAV.D_prop**5 / (2 * np.pi)**2
-            b = MAV.rho * MAV.D_prop**4 * MAV.C_Q1 * airspeed / (2 * np.pi)  + (MAV.KQ * MAV.KV) / MAV.R_motor
+            b = MAV.rho * MAV.D_prop**4 * MAV.C_Q1 * airspeed / (2 * np.pi)  + MAV.KQ**2 / MAV.R_motor
             c = MAV.rho * MAV.D_prop**3 * MAV.C_Q2 * airspeed**2 - (MAV.KQ * V_in) / MAV.R_motor + MAV.KQ * MAV.i0
 
             # use the positive root
@@ -338,7 +338,7 @@ class MavDynamics:
             C_T = MAV.C_T2 * J_op**2 + MAV.C_T1 * J_op + MAV.C_T0
             C_Q = MAV.C_Q2 * J_op**2 + MAV.C_Q1 * J_op + MAV.C_Q0
 
-            n = Omega_op /(2 * np.pi)
+            n = Omega_op / (2 * np.pi)
 
             thrust_prop = MAV.rho * n**2 * MAV.D_prop**4 * C_T
             torque_prop = -MAV.rho * n**2 * MAV.D_prop**5 * C_Q  # XXX adding minus sign like in the book has the wrong sign compared to chap4_check output (?)
