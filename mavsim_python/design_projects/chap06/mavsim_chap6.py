@@ -5,6 +5,8 @@ mavsim_python
         2/5/2019 - RWB
         2/24/2020 - RWB
 """
+AP_MODEL = "PID"
+
 from dotenv import load_dotenv
 load_dotenv()
 import os
@@ -18,9 +20,12 @@ from tools.signals import Signals
 from models.mav_dynamics_control import MavDynamics
 from models.wind_simulation import WindSimulation
 from models.trim import compute_trim
-from control.autopilot import Autopilot
-# from control.autopilot_lqr import Autopilot
-# from control.autopilot_tecs import Autopilot
+if AP_MODEL == "LQR":
+    from control.autopilot_lqr import Autopilot
+elif AP_MODEL == "TECS":
+    from control.autopilot_tecs import Autopilot
+else:  # PID
+    from control.autopilot import Autopilot
 from viewers.mav_viewer import MavViewer
 from viewers.data_viewer import DataViewer
 from tools.quit_listener import QuitListener
@@ -50,7 +55,7 @@ if PLOTS:
                            data_recording_period=SIM.ts_plot_record_data, time_window_length=30)
 
 # initialize elements of the architecture
-wind = WindSimulation(SIM.ts_simulation)
+wind = WindSimulation(SIM.ts_simulation, steady_state=np.array([[1.5, 1, 2]]).T)
 mav = MavDynamics(SIM.ts_simulation)
 autopilot = Autopilot(SIM.ts_simulation)
 
@@ -98,6 +103,8 @@ while sim_time < end_time:
     3. Fix altitude and airspeed.  Tune sideslip washout filter to remove ringing in sideslip introduced by step response in chi
     4. Fix airspeed and chi_c (= initial heading angle) and put in step response on altitude
     5. Fix altitude and heading, and put in step response on airspeed
+
+    In all of the above steps, set wind to zero.  As a stress test, add wind
     '''
     # -------autopilot commands-------------
     commands.airspeed_command = Va_command.square(sim_time)
@@ -114,8 +121,8 @@ while sim_time < end_time:
     delta, commanded_state = autopilot.update(commands, estimated_state)
 
     # -------physical system-------------
-    #current_wind = wind.update(mav.true_state.altitude, mav.true_state.Va)  # get the new wind vector
-    current_wind = np.zeros((6,1))  # get the new wind vector
+    current_wind = wind.update(mav.true_state.altitude, mav.true_state.Va)  # get the new wind vector
+    #current_wind = np.zeros((6,1))  # when tuning the autopilot, set wind to zero
     mav.update(delta, current_wind)  # propagate the MAV dynamics
 
     # ------- animation -------
