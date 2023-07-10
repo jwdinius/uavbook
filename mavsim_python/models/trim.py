@@ -40,7 +40,7 @@ def compute_trim(mav: MavDynamics, Va, gamma):
                        [0],  # aileron
                        [0],  # rudder
                        [0.5]]) # throttle
-    x0 = np.concatenate((state0, delta0), axis=0)
+    x0 = np.concatenate((state0, delta0), axis=0).flatten()
     # define equality constraints
     cons = ({'type': 'eq',
              'fun': lambda x: np.array([
