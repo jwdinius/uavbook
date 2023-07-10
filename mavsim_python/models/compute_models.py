@@ -17,6 +17,7 @@ from message_types.msg_delta import MsgDelta
 def compute_model(mav, trim_state, trim_input):
     # Note: this function alters the mav private variables
     A_lon, B_lon, A_lat, B_lat = compute_ss_model(mav, trim_state, trim_input)
+    A_lon_w_alpha, B_lon_w_alpha, A_lat_w_beta, B_lat_w_beta = compute_ss_model(mav, trim_state, trim_input, with_beta=True, with_alpha=True) 
     # compute eigenvalues of A_lat and A_lon
     lon_eigvals, _ = np.linalg.eig(A_lon)
     icsi_lon0, wn_lon0 = convert_complex_conj_pair(lon_eigvals[1], lon_eigvals[2])
@@ -63,6 +64,16 @@ def compute_model(mav, trim_state, trim_input):
                 np.real(lon_eigvals[4]), np.imag(lon_eigvals[4])))
     file.write(f'#A_lon_mode_1: \icsi = {icsi_lon0}, \w_n = {wn_lon0}\n')
     file.write(f'#A_lon_mode_2: \icsi = {icsi_lon1}, \w_n = {wn_lon1}\n')
+    file.write('A_lon_w_alpha = np.array([\n    [%f, %f, %f, %f, %f],\n    '
+               '[%f, %f, %f, %f, %f],\n    '
+               '[%f, %f, %f, %f, %f],\n    '
+               '[%f, %f, %f, %f, %f],\n    '
+               '[%f, %f, %f, %f, %f]])\n' %
+    (A_lon_w_alpha[0][0], A_lon_w_alpha[0][1], A_lon_w_alpha[0][2], A_lon_w_alpha[0][3], A_lon_w_alpha[0][4],
+     A_lon_w_alpha[1][0], A_lon_w_alpha[1][1], A_lon_w_alpha[1][2], A_lon_w_alpha[1][3], A_lon_w_alpha[1][4],
+     A_lon_w_alpha[2][0], A_lon_w_alpha[2][1], A_lon_w_alpha[2][2], A_lon_w_alpha[2][3], A_lon_w_alpha[2][4],
+     A_lon_w_alpha[3][0], A_lon_w_alpha[3][1], A_lon_w_alpha[3][2], A_lon_w_alpha[3][3], A_lon_w_alpha[3][4],
+     A_lon_w_alpha[4][0], A_lon_w_alpha[4][1], A_lon_w_alpha[4][2], A_lon_w_alpha[4][3], A_lon_w_alpha[4][4]))
     file.write('B_lon = np.array([\n    [%f, %f],\n    '
                '[%f, %f],\n    '
                '[%f, %f],\n    '
@@ -73,6 +84,16 @@ def compute_model(mav, trim_state, trim_input):
      B_lon[2][0], B_lon[2][1],
      B_lon[3][0], B_lon[3][1],
      B_lon[4][0], B_lon[4][1],))
+    file.write('B_lon_w_alpha = np.array([\n    [%f, %f],\n    '
+               '[%f, %f],\n    '
+               '[%f, %f],\n    '
+               '[%f, %f],\n    '
+               '[%f, %f]])\n' %
+    (B_lon_w_alpha[0][0], B_lon_w_alpha[0][1],
+     B_lon_w_alpha[1][0], B_lon_w_alpha[1][1],
+     B_lon_w_alpha[2][0], B_lon_w_alpha[2][1],
+     B_lon_w_alpha[3][0], B_lon_w_alpha[3][1],
+     B_lon_w_alpha[4][0], B_lon_w_alpha[4][1],))
     file.write('A_lat = np.array([\n    [%f, %f, %f, %f, %f],\n    '
                '[%f, %f, %f, %f, %f],\n    '
                '[%f, %f, %f, %f, %f],\n    '
@@ -88,6 +109,16 @@ def compute_model(mav, trim_state, trim_input):
                 np.real(lat_eigvals[2]), np.imag(lat_eigvals[2]), np.real(lat_eigvals[3]), np.imag(lat_eigvals[3]), \
                 np.real(lat_eigvals[4]), np.imag(lat_eigvals[4])))
     file.write(f'#A_lat_mode: \icsi = {icsi_lat}, \w_n = {wn_lat}\n')
+    file.write('A_lat_w_beta = np.array([\n    [%f, %f, %f, %f, %f],\n    '
+               '[%f, %f, %f, %f, %f],\n    '
+               '[%f, %f, %f, %f, %f],\n    '
+               '[%f, %f, %f, %f, %f],\n    '
+               '[%f, %f, %f, %f, %f]])\n' %
+    (A_lat_w_beta[0][0], A_lat_w_beta[0][1], A_lat_w_beta[0][2], A_lat_w_beta[0][3], A_lat_w_beta[0][4],
+     A_lat_w_beta[1][0], A_lat_w_beta[1][1], A_lat_w_beta[1][2], A_lat_w_beta[1][3], A_lat_w_beta[1][4],
+     A_lat_w_beta[2][0], A_lat_w_beta[2][1], A_lat_w_beta[2][2], A_lat_w_beta[2][3], A_lat_w_beta[2][4],
+     A_lat_w_beta[3][0], A_lat_w_beta[3][1], A_lat_w_beta[3][2], A_lat_w_beta[3][3], A_lat_w_beta[3][4],
+     A_lat_w_beta[4][0], A_lat_w_beta[4][1], A_lat_w_beta[4][2], A_lat_w_beta[4][3], A_lat_w_beta[4][4]))
     file.write('B_lat = np.array([\n    [%f, %f],\n    '
                '[%f, %f],\n    '
                '[%f, %f],\n    '
@@ -98,6 +129,16 @@ def compute_model(mav, trim_state, trim_input):
      B_lat[2][0], B_lat[2][1],
      B_lat[3][0], B_lat[3][1],
      B_lat[4][0], B_lat[4][1],))
+    file.write('B_lat_w_beta = np.array([\n    [%f, %f],\n    '
+               '[%f, %f],\n    '
+               '[%f, %f],\n    '
+               '[%f, %f],\n    '
+               '[%f, %f]])\n' %
+    (B_lat_w_beta[0][0], B_lat_w_beta[0][1],
+     B_lat_w_beta[1][0], B_lat_w_beta[1][1],
+     B_lat_w_beta[2][0], B_lat_w_beta[2][1],
+     B_lat_w_beta[3][0], B_lat_w_beta[3][1],
+     B_lat_w_beta[4][0], B_lat_w_beta[4][1],))
     file.write('Ts = %f\n' % Ts)
     file.close()
 
@@ -130,7 +171,7 @@ def compute_tf_model(mav, trim_state, trim_input):
     return Va_trim, alpha_trim, theta_trim, a_phi1, a_phi2, a_theta1, a_theta2, a_theta3, a_V1, a_V2, a_V3
 
 
-def compute_ss_model(mav, trim_state, trim_input):
+def compute_ss_model(mav, trim_state, trim_input, with_beta=False, with_alpha=False):
     x_euler = euler_state(trim_state)
     
     ##### TODO #####
@@ -166,6 +207,29 @@ def compute_ss_model(mav, trim_state, trim_input):
                       B[11, [1, 2]],
                       B[6, [1, 2]],
                       B[8, [1, 2]]])
+
+    if with_beta:
+        # replace v with beta in the first entry of the lateral state; see pg. 82
+        mav._state = trim_state
+        mav._update_velocity_data()
+        Va_trim = mav._Va
+        beta_trim = mav._beta
+        scale = Va_trim * np.cos(beta_trim)
+        A_lat[:, 0] *= scale
+        A_lat[0, :] /= scale
+        B_lat[0, :] /= scale
+
+    if with_alpha:
+        # replace w with alpha in the second entry of the longitudinal state; see pg. 87
+        mav._state = trim_state
+        mav._update_velocity_data()
+        Va_trim = mav._Va
+        alpha_trim = mav._beta
+        scale = Va_trim * np.cos(alpha_trim)
+        A_lon[:, 1] *= scale
+        A_lon[1, :] /= scale
+        B_lon[1, :] /= scale
+
     return A_lon, B_lon, A_lat, B_lat
 
 def euler_state(x_quat):

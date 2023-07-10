@@ -5,7 +5,8 @@ mavsim_python
         2/5/2019 - RWB
         2/24/2020 - RWB
 """
-AP_MODEL = "PID"
+#AP_MODEL = "PID"
+AP_MODEL = "LQR"
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -55,6 +56,7 @@ if PLOTS:
                            data_recording_period=SIM.ts_plot_record_data, time_window_length=30)
 
 # initialize elements of the architecture
+#wind = WindSimulation(SIM.ts_simulation)
 wind = WindSimulation(SIM.ts_simulation, steady_state=np.array([[1.5, 1, 2]]).T)
 mav = MavDynamics(SIM.ts_simulation)
 autopilot = Autopilot(SIM.ts_simulation)
@@ -66,8 +68,13 @@ Va = 25.
 gamma = 0 * np.pi/180.
 trim_state, trim_input = compute_trim(mav, Va, gamma)
 mav._state = trim_state  # set the initial state of the mav to the trim state
-autopilot.set_trim_input(trim_input)
+mav._update_true_state()
+
 true_state_copy = deepcopy(mav.true_state)
+if AP_MODEL == "LQR":
+    autopilot.set_trim_state(true_state_copy)
+
+autopilot.set_trim_input(trim_input)
 
 # autopilot commands
 from message_types.msg_autopilot import MsgAutopilot
@@ -81,7 +88,7 @@ altitude_command = Signals(dc_offset=true_state_copy.altitude,
                            start_time=0.0,
                            frequency=0.02)
 course_command = Signals(dc_offset=true_state_copy.chi,
-                         amplitude=np.radians(185),
+                         amplitude=np.radians(180),
                          start_time=5.0,
                          frequency=0.015)
 roll_feedforward_command = Signals(dc_offset=0,
@@ -110,11 +117,11 @@ while sim_time < end_time:
     commands.airspeed_command = Va_command.square(sim_time)
     #commands.airspeed_command = Va 
     commands.course_command = course_command.square(sim_time)
-    #commands.course_command = mav.true_state.chi  # XXX comment this line for Step 2: course step response
+    #commands.course_command = true_state_copy.chi  # XXX comment this line for Step 2: course step response
     commands.altitude_command = altitude_command.square(sim_time)
     #commands.altitude_command = true_state_copy.altitude
     #commands.phi_feedforward = roll_feedforward_command.square(sim_time)  # only needed for tuning the roll inner loop
-    commands.phi_feedforward = 0
+    #commands.phi_feedforward = 0
 
     # -------autopilot-------------
     estimated_state = mav.true_state  # uses true states in the control
