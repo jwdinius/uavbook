@@ -57,14 +57,18 @@ class MavDynamics:
         self._beta = 0
         # initialize other before function calls
         self._use_lo_fi_thrust_model = use_lo_fi_thrust_model
+        self._inertial_position_derivs = [0.]*3
+        # to compute Va_dot
+        self._body_velocities = [0.]*3
+        self._body_accels = [0.]*3
         # initialize true_state message
         self.true_state = MsgState()
         # update velocity data 
         self._update_velocity_data()
-        # update true state before updating forces and moments
-        self._update_true_state()
         # update forces and moments 
         self._forces_moments(delta=MsgDelta())
+        # update true state before updating forces and moments
+        self._update_true_state()
 
 
     ###################################
@@ -102,6 +106,10 @@ class MavDynamics:
         self._update_velocity_data(wind)
 
         # update the message class for the true state
+        current_state_derivs = self._derivatives(self._state[0:13], forces_moments)
+        self._inertial_position_derivs = [current_state_derivs.item(i) for i in range(0, 3)]
+        self._body_velocities = [self._state.item(i) for i in range(3, 6)]
+        self._body_accels = [current_state_derivs.item(i) for i in range(3, 6)]
         self._update_true_state()
 
     def external_set_state(self, new_state):
@@ -212,17 +220,7 @@ class MavDynamics:
         return [fg.item(i) for i in range(0, 3)]
 
     def _calc_longitudinal_forces_and_moments(self, delta):
-        p, q, r = [self._state.item(i) for i in range(10, 13)]
-        M = MAV.M
-        alpha = self._alpha
-        alpha0 = MAV.alpha0
-        rho = MAV.rho
-        Va = self._Va
-        S = MAV.S_wing
-        #_q = self.true_state.q
-        _q = q
-        c = MAV.c
-        de = delta.elevator
+        _, q, _ = [self._state.item(i) for i in range(10, 13)]
 
         # compute Lift and Drag coefficients (CL, CD) (pgs. 47-48)
         ## Lift coefficient: C_L(\alpha)
@@ -241,6 +239,7 @@ class MavDynamics:
         aero_force_scaling = 0.5 * MAV.rho * self._Va**2 * MAV.S_wing
         F_lift = aero_force_scaling * (C_L + 0.5 * MAV.C_L_q * MAV.c / self._Va * q + MAV.C_L_delta_e * delta.elevator) 
         F_drag = aero_force_scaling * (C_D + 0.5 * MAV.C_D_q * MAV.c / self._Va * q + MAV.C_D_delta_e * delta.elevator)
+        self._F_drag = F_drag  # added for quick POC of tecs AP
 
         # forces, moments = sum(gravity, aero, propeller)
         ca = np.cos(self._alpha)
@@ -284,6 +283,7 @@ class MavDynamics:
 
         # propeller thrust and torque
         thrust_prop, torque_prop = self._motor_thrust_torque(self._Va, delta.throttle)
+        print(f"thrust_prop: {thrust_prop}")
         if self._debug:
             Fp, Qp = self.calcThrustForceAndMoment(delta.throttle)
             assert np.isclose(Fp, thrust_prop)
@@ -357,6 +357,16 @@ class MavDynamics:
         self.true_state.east = self._state.item(1)
         self.true_state.altitude = -self._state.item(2)
         self.true_state.Va = self._Va
+        #### for TECS
+        u, v, w = self._body_velocities
+        u_dot, v_dot, w_dot = self._body_accels
+        self.true_state.Va_dot = (u * u_dot + v * v_dot + w * w_dot) / self._Va
+        self.true_state.h_dot = -self._inertial_position_derivs[2]
+        print(f"true Va_dot: {self.true_state.Va_dot}")
+        print(f"true h_dot: {self.true_state.h_dot}")
+        self.true_state.F_drag = self._F_drag
+        print(f"true drag: {self._F_drag}")
+        ####
         self.true_state.alpha = self._alpha
         self.true_state.beta = self._beta
         self.true_state.phi = phi

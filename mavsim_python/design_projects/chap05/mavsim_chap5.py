@@ -88,7 +88,7 @@ while sim_time < end_time:
     # delta.rudder = delta_r_trim + input_signal.doublet(sim_time)
 
     mav.update(delta, current_wind)  # propagate the MAV dynamics
-
+    
     # -------update viewer-------------
     if ANIMATION:
         mav_view.update(mav.true_state)  # plot body of MAV

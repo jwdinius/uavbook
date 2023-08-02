@@ -6,7 +6,8 @@ mavsim_python
         2/24/2020 - RWB
 """
 #AP_MODEL = "PID"
-AP_MODEL = "LQR"
+#AP_MODEL = "LQR"
+AP_MODEL = "TECS"
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -114,12 +115,12 @@ while sim_time < end_time:
     In all of the above steps, set wind to zero.  As a stress test, add wind
     '''
     # -------autopilot commands-------------
-    commands.airspeed_command = Va_command.square(sim_time)
-    #commands.airspeed_command = Va 
-    commands.course_command = course_command.square(sim_time)
-    #commands.course_command = true_state_copy.chi  # XXX comment this line for Step 2: course step response
-    commands.altitude_command = altitude_command.square(sim_time)
-    #commands.altitude_command = true_state_copy.altitude
+    #commands.airspeed_command = Va_command.square(sim_time)
+    commands.airspeed_command = Va 
+    #commands.course_command = course_command.square(sim_time)
+    commands.course_command = true_state_copy.chi  # XXX comment this line for Step 2: course step response
+    #commands.altitude_command = altitude_command.square(sim_time)
+    commands.altitude_command = true_state_copy.altitude
     #commands.phi_feedforward = roll_feedforward_command.square(sim_time)  # only needed for tuning the roll inner loop
     #commands.phi_feedforward = 0
 
@@ -128,8 +129,8 @@ while sim_time < end_time:
     delta, commanded_state = autopilot.update(commands, estimated_state)
 
     # -------physical system-------------
-    current_wind = wind.update(mav.true_state.altitude, mav.true_state.Va)  # get the new wind vector
-    #current_wind = np.zeros((6,1))  # when tuning the autopilot, set wind to zero
+    #current_wind = wind.update(mav.true_state.altitude, mav.true_state.Va)  # get the new wind vector
+    current_wind = np.zeros((6,1))  # when tuning the autopilot, set wind to zero
     mav.update(delta, current_wind)  # propagate the MAV dynamics
 
     # ------- animation -------
