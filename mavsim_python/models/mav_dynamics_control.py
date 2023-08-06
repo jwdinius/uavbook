@@ -102,7 +102,6 @@ class MavDynamics:
         self._update_velocity_data(wind)
 
         # update the message class for the true state
-        current_state_derivs = self._derivatives(self._state[0:13], forces_moments)
         self._update_true_state()
 
     def external_set_state(self, new_state):

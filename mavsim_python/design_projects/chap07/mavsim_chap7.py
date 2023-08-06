@@ -21,9 +21,9 @@ from tools.quit_listener import QuitListener
 quitter = QuitListener()
 
 VIDEO = False
-DATA_PLOTS = False
+DATA_PLOTS = True
 SENSOR_PLOTS = True
-ANIMATION = True
+ANIMATION = False
 SAVE_PLOT_IMAGE = False
 
 # video initialization
@@ -86,7 +86,7 @@ while sim_time < end_time:
     delta, commanded_state = autopilot.update(commands, estimated_state)
 
     # -------physical system-------------
-    current_wind = wind.update()  # get the new wind vector
+    current_wind = wind.update(mav.true_state.altitude, mav.true_state.Va)  # get the new wind vector
     mav.update(delta, current_wind)  # propagate the MAV dynamics
 
     # -------update viewer-------------
