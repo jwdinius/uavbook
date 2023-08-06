@@ -37,11 +37,10 @@ pitch_kp = (wn_pitch**2 - TF.a_theta2) / TF.a_theta3
 pitch_kd = (2. * zeta_pitch * wn_pitch - TF.a_theta1) / TF.a_theta3
 K_theta_DC = pitch_kp * TF.a_theta3 / (TF.a_theta2 + pitch_kp * TF.a_theta3)
 
-wn_pitch_tecs = 50
-zeta_pitch_tecs = 1.5
+wn_pitch_tecs = 35  # XXX if this number is too small, the plane will fall out of the sky (literally)
+zeta_pitch_tecs = 1.25
 pitch_kp_tecs = (wn_pitch_tecs**2 - TF.a_theta2) / TF.a_theta3
 pitch_kd_tecs = (2. * zeta_pitch_tecs * wn_pitch_tecs - TF.a_theta1) / TF.a_theta3
-#pitch_kd_tecs = 0. 
 
 #----------altitude loop-------------
 W_altitude = 50  # XXX >= 1, book recommends between 5 and 10, too small and the step response rings a lot

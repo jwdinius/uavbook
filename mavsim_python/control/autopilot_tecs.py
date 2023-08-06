@@ -87,9 +87,10 @@ class Autopilot:
                         kp=AP.pitch_kp_tecs,
                         kd=AP.pitch_kd_tecs,
                         limit=np.radians(45))
-        self.gamma_lyapunov = 1.0  # how hard to drive the Lyapunov function to 0: V_dot = -gamma * V, which has solution V(0)*exp(-gamma*t)
-        self.k_Va = 0.1  # 1 / time constant for first-order lag on desired airspeed error dynmamics
-        self.k_h = 0.1  # 1 / time constant for first-order lag on desired altitude error dynamics
+        self.k_T = 0.4
+        self.k_D = 0.6  # recommended > k_T 
+        self.k_Va = 0.6  # 1 / time constant for first-order acceleration model
+        self.k_h = 0.6  # 1 / time constant for first-order climb rate model
         self.delta_t_d1 = 0.5
         self.theta_c_max = np.radians(45)
         self.Ts = ts_control
@@ -124,53 +125,37 @@ class Autopilot:
         # compute desired energy derivatives (assuming first order lag on airspeed and altitude errors)
         airspeed_error = cmd.airspeed_command - state.Va
         altitude_error = cmd.altitude_command - state.altitude
-        print(f"-- airspeed_error = {airspeed_error}")
-        print(f"-- altitude_error = {altitude_error}")
-        Va_des_dot = state.Va_dot - self.k_Va * airspeed_error
-        h_des_dot = state.h_dot - self.k_h * altitude_error
+        Va_des_dot = self.k_Va * airspeed_error
+        h_des_dot = self.k_h * altitude_error
 
         E_K_des_dot = MAV.mass * cmd.airspeed_command * Va_des_dot 
         E_P_des_dot = MAV.mass * MAV.gravity * h_des_dot
         E_T_des_dot = E_K_des_dot + E_P_des_dot
         E_K_tilde = E_K_des - E_K
         E_P_tilde = E_P_des - E_P
-        E_T_tilde = E_K_tilde + E_P_tilde  # total energy error
+        E_T_tilde = E_K_tilde + E_P_tilde
         
         ## thrust
-        #T_drag = -state.F_drag  # equal and opposite thrust to oppose drag
-        print(f"-- T_drag = {state.F_drag}")
-        print(f"-- E_T_tilde = {E_T_tilde}")
-        print(f"-- E_T_des_dot = {E_T_des_dot}")
-        Tc = state.F_drag + (E_T_des_dot + self.gamma_lyapunov * E_T_tilde) / state.Va
-        #Tc = calculate_motor_thrust(self._trim_input.throttle, state.Va)
-        print(f"-- Tc = {Tc}")
+        Tc = state.F_drag + (E_T_des_dot + self.k_T * E_T_tilde) / state.Va
         # convert thrust command to throttle command
         ## solve T_c - calculate_motor_thrust(state.Va, delta_t) = 0 for delta_t
-        # initialize the root finder with previous estimate
+        ## initialize the root finder with previous estimate
         delta_t = compute_throttle_from_thrust(Tc, self.delta_t_d1, state.Va)
         if delta_t is None:
-            print("Throttle calculation FAILED")
+            print("Throttle calculation FAILED, using previous value")
+            delta.throttle = self.delta_t_d1 
         else:
-            print(f"-- Unsaturated throttle = {delta_t}")
             delta.throttle = saturate(delta_t, 0, 1)
-            print(f"-- Saturated throttle {delta.throttle}")
             self.delta_t_d1 = delta.throttle
 
         ## pitch angle
-        print(f"-- E_P_des_dot = {E_P_des_dot}")
-        print(f"-- gamma*E_P_tilde = {self.gamma_lyapunov*E_P_tilde}")
-        sin_theta_c = (E_P_des_dot + self.gamma_lyapunov * E_P_tilde) / (MAV.mass * MAV.gravity * state.Va)
-        #print(f"+++++ {sin_theta_c}")
-        if abs(sin_theta_c) > 1.:
-            print("sin_theta_c is too large")
-
-        sin_theta_c_sat = saturate(sin_theta_c, -np.sin(self.theta_c_max), np.sin(self.theta_c_max))
-        theta_c = np.arcsin(sin_theta_c_sat)
-        #theta_c = state.theta
-        print(f"-- theta_c = {theta_c}")
+        sin_gamma_c = h_des_dot / state.Va + ( (self.k_T - self.k_D) * E_K_tilde + (self.k_T + self.k_D) * E_P_tilde ) / ( 2 * MAV.mass * MAV.gravity * state.Va ) 
+        
+        sin_gamma_c_sat = saturate(sin_gamma_c, -np.sin(self.theta_c_max), np.sin(self.theta_c_max))
+        # theta_c = gamma + alpha
+        theta_c = saturate(np.arcsin(sin_gamma_c_sat) + state.alpha, -self.theta_c_max, self.theta_c_max)
         delta.elevator = self.pitch_from_elevator.update(theta_c, state.theta, state.q)
-        #delta.elevator = self._trim_input.elevator
-        print(f"-- elevator = {delta.elevator}")
+        
         # construct output and commanded states
         self.commanded_state.altitude = cmd.altitude_command 
         self.commanded_state.Va = cmd.airspeed_command

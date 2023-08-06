@@ -115,12 +115,12 @@ while sim_time < end_time:
     In all of the above steps, set wind to zero.  As a stress test, add wind
     '''
     # -------autopilot commands-------------
-    #commands.airspeed_command = Va_command.square(sim_time)
-    commands.airspeed_command = Va 
-    #commands.course_command = course_command.square(sim_time)
-    commands.course_command = true_state_copy.chi  # XXX comment this line for Step 2: course step response
-    #commands.altitude_command = altitude_command.square(sim_time)
-    commands.altitude_command = true_state_copy.altitude
+    commands.airspeed_command = Va_command.square(sim_time)
+    #commands.airspeed_command = Va 
+    commands.course_command = course_command.square(sim_time)
+    #commands.course_command = true_state_copy.chi  # XXX comment this line for Step 2: course step response
+    commands.altitude_command = altitude_command.square(sim_time)
+    #commands.altitude_command = true_state_copy.altitude
     #commands.phi_feedforward = roll_feedforward_command.square(sim_time)  # only needed for tuning the roll inner loop
     #commands.phi_feedforward = 0
 

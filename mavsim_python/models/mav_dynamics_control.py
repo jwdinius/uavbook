@@ -57,10 +57,6 @@ class MavDynamics:
         self._beta = 0
         # initialize other before function calls
         self._use_lo_fi_thrust_model = use_lo_fi_thrust_model
-        self._inertial_position_derivs = [0.]*3
-        # to compute Va_dot
-        self._body_velocities = [0.]*3
-        self._body_accels = [0.]*3
         # initialize true_state message
         self.true_state = MsgState()
         # update velocity data 
@@ -107,9 +103,6 @@ class MavDynamics:
 
         # update the message class for the true state
         current_state_derivs = self._derivatives(self._state[0:13], forces_moments)
-        self._inertial_position_derivs = [current_state_derivs.item(i) for i in range(0, 3)]
-        self._body_velocities = [self._state.item(i) for i in range(3, 6)]
-        self._body_accels = [current_state_derivs.item(i) for i in range(3, 6)]
         self._update_true_state()
 
     def external_set_state(self, new_state):
@@ -283,7 +276,6 @@ class MavDynamics:
 
         # propeller thrust and torque
         thrust_prop, torque_prop = self._motor_thrust_torque(self._Va, delta.throttle)
-        print(f"thrust_prop: {thrust_prop}")
         if self._debug:
             Fp, Qp = self.calcThrustForceAndMoment(delta.throttle)
             assert np.isclose(Fp, thrust_prop)
@@ -358,14 +350,7 @@ class MavDynamics:
         self.true_state.altitude = -self._state.item(2)
         self.true_state.Va = self._Va
         #### for TECS
-        u, v, w = self._body_velocities
-        u_dot, v_dot, w_dot = self._body_accels
-        self.true_state.Va_dot = (u * u_dot + v * v_dot + w * w_dot) / self._Va
-        self.true_state.h_dot = -self._inertial_position_derivs[2]
-        print(f"true Va_dot: {self.true_state.Va_dot}")
-        print(f"true h_dot: {self.true_state.h_dot}")
         self.true_state.F_drag = self._F_drag
-        print(f"true drag: {self._F_drag}")
         ####
         self.true_state.alpha = self._alpha
         self.true_state.beta = self._beta
