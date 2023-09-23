@@ -21,6 +21,8 @@ from viewers.data_viewer import DataViewer
 from viewers.sensor_viewer import SensorViewer
 from tools.quit_listener import QuitListener
 
+# DEBUG - REMOVE
+from copy import deepcopy
 quitter = QuitListener()
 
 VIDEO = False
@@ -50,10 +52,10 @@ if SENSOR_PLOTS:
                            data_recording_period=SIM.ts_plot_record_data, time_window_length=30)
 
 # initialize elements of the architecture
-wind = WindSimulation(SIM.ts_simulation)
-mav = MavDynamics(SIM.ts_simulation)
+wind = WindSimulation(SIM.ts_simulation, steady_state = np.array([[1., -1.2, -0.4]]).T)
+mav = MavDynamics(SIM.ts_simulation, use_biases=False, debug=False)
 autopilot = Autopilot(SIM.ts_simulation)
-observer = Observer(SIM.ts_simulation)
+observer = Observer(SIM.ts_simulation, initial_measurements=mav.sensors())
 
 # autopilot commands
 from message_types.msg_autopilot import MsgAutopilot
@@ -90,7 +92,7 @@ while sim_time < end_time:
     delta, commanded_state = autopilot.update(commands, estimated_state)
 
     # -------- physical system -------------
-    current_wind = wind.update()  # get the new wind vector
+    current_wind = wind.update(mav.true_state.altitude, mav.true_state.Va)  # get the new wind vector
     mav.update(delta, current_wind)  # propagate the MAV dynamics
 
     # -------- update viewer -------------

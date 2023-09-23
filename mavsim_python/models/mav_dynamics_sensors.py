@@ -20,10 +20,13 @@ from message_types.msg_delta import MsgDelta
 import parameters.aerosonde_parameters as MAV
 import parameters.sensor_parameters as SENSOR
 from tools.rotations import Quaternion2Rotation, Quaternion2Euler, Euler2Rotation
+from scipy.optimize import minimize
 
 class MavDynamics:
-    def __init__(self, Ts):
+    def __init__(self, Ts, use_biases=False, debug=False):
         self._ts_simulation = Ts
+        self._debug = debug
+        self._use_biases = use_biases
         # set initial states based on parameter file
         # _state is the 13x1 internal state of the aircraft that is being propagated:
         # _state = [pn, pe, pd, u, v, w, e0, e1, e2, e3, p, q, r]
@@ -108,12 +111,30 @@ class MavDynamics:
 
     def sensors(self):
         "Return value of sensors on MAV: gyros, accels, absolute_pressure, dynamic_pressure, GPS"
-       
+        gyro_x_bias = 0.
+        gyro_y_bias = 0.
+        gyro_z_bias = 0.
+        mag_x_bias = 0.
+        mag_y_bias = 0.
+        mag_z_bias = 0.
+        abs_pres_bias = 0.
+        diff_pres_bias = 0.
+
+        if self._use_biases:
+            gyro_x_bias = SENSOR.gyro_x_bias
+            gyro_y_bias = SENSOR.gyro_y_bias
+            gyro_z_bias = SENSOR.gyro_z_bias
+            mag_x_bias = SENSOR.mag_x_bias
+            mag_y_bias = SENSOR.mag_y_bias
+            mag_z_bias = SENSOR.mag_z_bias
+            abs_pres_bias = SENSOR.abs_pres_bias
+            diff_pres_bias = SENSOR.diff_pres_bias
+
         # simulate rate gyros(units are rad / sec)
         p, q, r = [self._state.item(i) for i in range(10, 13)]
-        self._sensors.gyro_x = p + np.random.normal(loc=SENSOR.gyro_x_bias, scale=SENSOR.gyro_sigma)
-        self._sensors.gyro_y = q + np.random.normal(loc=SENSOR.gyro_y_bias, scale=SENSOR.gyro_sigma)
-        self._sensors.gyro_z = r + np.random.normal(loc=SENSOR.gyro_z_bias, scale=SENSOR.gyro_sigma)
+        self._sensors.gyro_x = p + np.random.normal(loc=gyro_x_bias, scale=SENSOR.gyro_sigma)
+        self._sensors.gyro_y = q + np.random.normal(loc=gyro_y_bias, scale=SENSOR.gyro_sigma)
+        self._sensors.gyro_z = r + np.random.normal(loc=gyro_z_bias, scale=SENSOR.gyro_sigma)
 
         # simulate accelerometers(units of g)
         ax, ay, az = [self._forces.item(i) / MAV.mass for i in range(3)]
@@ -123,22 +144,45 @@ class MavDynamics:
         self._sensors.accel_z = az - MAV.gravity * np.cos(theta) * np.cos(phi) + np.random.normal(scale=SENSOR.accel_sigma) 
 
         # simulate magnetometers
-        # magnetic field in provo has magnetic declination of 12.5 degrees
-        # and magnetic inclination of 66 degrees
-        m_inertial = SENSOR.R_mag_to_inertial[:, 0].reshape((3,))
-        R_inertial_to_body = Quaternion2Rotation(self._state[6:10])
-        m_body = R_inertial_to_body @ m_inertial
-        m_x, m_y, m_z = m_body
-        self._sensors.mag_x = m_x + np.random.normal(loc=SENSOR.mag_bias, scale=SENSOR.mag_sigma)
-        self._sensors.mag_y = m_y + np.random.normal(loc=SENSOR.mag_bias, scale=SENSOR.mag_sigma)
-        self._sensors.mag_z = m_z + np.random.normal(loc=SENSOR.mag_bias, scale=SENSOR.mag_sigma)
+        # get magnetic north in the inertial frame
+        m_i = SENSOR.R_m2i @ np.array([[1.], [0.], [0.]])
+        R_b2i = Quaternion2Rotation(self._state[6:10])
+        # get magnetic north in the body frame
+        m_body = R_b2i.T @ m_i
+        m_x, m_y, m_z = m_body.reshape((3,))
+        # apply bias and noise
+        self._sensors.mag_x = m_x + np.random.normal(loc=mag_x_bias, scale=SENSOR.mag_sigma)
+        self._sensors.mag_y = m_y + np.random.normal(loc=mag_y_bias, scale=SENSOR.mag_sigma)
+        self._sensors.mag_z = m_z + np.random.normal(loc=mag_z_bias, scale=SENSOR.mag_sigma)
+        phi, theta, psi = Quaternion2Euler(self._state[6:10])
+        
+        if self._debug:
+            m_b_hat = np.array([[self._sensors.mag_x], [self._sensors.mag_y], [self._sensors.mag_z]])
+            # R_v2^v1 = (R_v1^v2).T from pg. 15 of book
+            Rth = np.array([[np.cos(theta), 0., np.sin(theta)], [0., 1., 0.], [-np.sin(theta), 0., np.cos(theta)]]) 
+            # R_b^v2 = (R_v2^b).T from pg. 15 of book
+            Rph = np.array([[1., 0., 0.], [0., np.cos(phi), -np.sin(phi)], [0., np.sin(phi), np.cos(phi)]]) 
+            m_v1_hat = Rth @ Rph @ m_b_hat
+            def fn(x, m_i, b_v1):
+                _psi = x[0]
+                # R_i^v1
+                Rps = np.array([[np.cos(_psi), np.sin(_psi), 0.], [-np.sin(_psi), np.cos(_psi), 0.], [0., 0., 1.]])
+                m_v1 = Rps @ m_i
+                return (m_v1[0, 0] - b_v1[0, 0])**2 + (m_v1[1, 0] - b_v1[1, 0])**2
+            heading_soln = minimize(fn, psi, args=(m_i, m_v1_hat))
+            print(f"+++ psi(true): {np.degrees(psi)}")
+            if not heading_soln.success:
+                print("heading root find failed")
+            else:
+                heading = np.degrees(heading_soln.x[0])
+                print(f"### heading (alt): {heading}")
  
 
         # simulate pressure sensors
         h_AGL = self.true_state.altitude
-        self._sensors.abs_pressure = MAV.rho * MAV.gravity * h_AGL + np.random.normal(loc=SENSOR.abs_pres_bias, scale=SENSOR.abs_pres_sigma)
+        self._sensors.abs_pressure = MAV.rho * MAV.gravity * h_AGL + np.random.normal(loc=abs_pres_bias, scale=SENSOR.abs_pres_sigma)
         Va = self.true_state.Va
-        self._sensors.diff_pressure = 0.5 * MAV.rho * Va**2 + np.random.normal(loc=SENSOR.diff_pres_bias, scale=SENSOR.diff_pres_sigma)
+        self._sensors.diff_pressure = 0.5 * MAV.rho * Va**2 + np.random.normal(loc=diff_pres_bias, scale=SENSOR.diff_pres_sigma)
         
         # simulate GPS sensor
         if self._t_gps >= SENSOR.ts_gps:
@@ -151,10 +195,14 @@ class MavDynamics:
             self._sensors.gps_n = self.true_state.north + self._gps_eta_n
             self._sensors.gps_e = self.true_state.east + self._gps_eta_e
             self._sensors.gps_h = self.true_state.altitude + self._gps_eta_h
-            Vg_x = Va * np.cos(psi) + self.true_state.wn
-            Vg_y = Va * np.sin(psi) + self.true_state.we
-            self._sensors.gps_Vg = np.sqrt(Vg_x**2 + Vg_y**2) + np.random.normal(scale=SENSOR.gps_Vg_sigma)
-            self._sensors.gps_course = np.arctan2(Vg_y, Vg_x) + np.random.normal(scale=SENSOR.gps_course_sigma)
+            Vn = self.true_state.Vg * np.cos(self.true_state.chi) * np.cos(self.true_state.gamma)
+            Ve = self.true_state.Vg * np.sin(self.true_state.chi) * np.cos(self.true_state.gamma)
+            sigma_Vg = SENSOR.gps_Vg_sigma
+            sigma_chi = sigma_Vg / np.sqrt(Vn**2 + Ve**2)
+            sigma_gamma = sigma_Vg / self.true_state.Vg
+            self._sensors.gps_Vg = self.true_state.Vg + np.random.normal(scale=sigma_Vg)
+            self._sensors.gps_course = self.true_state.chi + np.random.normal(scale=sigma_chi)
+            self._sensors.gps_gamma = self.true_state.gamma + np.random.normal(scale=sigma_gamma)
             self._t_gps = 0.
         else:
             self._t_gps += self._ts_simulation
@@ -382,15 +430,25 @@ class MavDynamics:
         self.true_state.theta = theta
         self.true_state.psi = psi
         self.true_state.Vg = np.linalg.norm(pdot)
-        self.true_state.gamma = np.arcsin(pdot.item(2) / self.true_state.Vg)
+        self.true_state.gamma = np.arcsin(-pdot.item(2) / self.true_state.Vg)
         self.true_state.chi = np.arctan2(pdot.item(1), pdot.item(0))
         self.true_state.p = self._state.item(10)
         self.true_state.q = self._state.item(11)
         self.true_state.r = self._state.item(12)
         self.true_state.wn = self._wind.item(0)
         self.true_state.we = self._wind.item(1)
+        self.true_state.wd = self._wind.item(2)
         self.true_state.bx = SENSOR.gyro_x_bias
         self.true_state.by = SENSOR.gyro_y_bias
         self.true_state.bz = SENSOR.gyro_z_bias
         self.true_state.camera_az = self._state.item(13)
         self.true_state.camera_el = self._state.item(14)
+        # to get an idea of model error with model on pg. 157:
+        #with open("accel_errors.txt", "a") as f:
+        #    p, q, r = [self._state.item(i) for i in range(10, 13)]
+        #    ax, ay, az = [self._forces.item(i) / MAV.mass for i in range(3)]
+        #    Va = self._Va 
+        #    err_x = ax - q * Va * np.sin(theta)
+        #    err_y = ay - (r * Va * np.cos(theta) - p* Va * np.sin(theta))
+        #    err_z = az - (-q * Va * np.cos(theta))
+        #    f.write(f"{err_x}, {err_y}, {err_z}\n")

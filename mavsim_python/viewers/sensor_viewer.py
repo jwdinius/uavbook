@@ -80,7 +80,10 @@ class SensorViewer:
         # define fourth row
         self._plotter.create_plot_widget(plot_id='gps_course', xlabel='Time (s)', ylabel='gps_course (deg)',
                                        window_length=self._data_window_length)
+        self._plotter.create_plot_widget(plot_id='gps_fpa', xlabel='Time (s)', ylabel='gps_fpa (deg)',
+                                       window_length=self._data_window_length)
         self._plotter.create_data_set(plot_id='gps_course', data_label='gps_course', data_color=gps_color)
+        self._plotter.create_data_set(plot_id='gps_fpa', data_label='gps_fpa', data_color=gps_color)
         self._plotter.show_window()
 
     def update(self, sensors):
@@ -109,6 +112,7 @@ class SensorViewer:
         self._plotter.add_data_point(plot_id='gps_h', data_label='gps_h', xvalue=t, yvalue=sensors.gps_h)
         self._plotter.add_data_point(plot_id='gps_Vg', data_label='gps_Vg', xvalue=t, yvalue=sensors.gps_Vg)
         self._plotter.add_data_point(plot_id='gps_course', data_label='gps_course', xvalue=t, yvalue=self.__rad_to_deg(sensors.gps_course))
+        self._plotter.add_data_point(plot_id='gps_fpa', data_label='gps_fpa', xvalue=t, yvalue=self.__rad_to_deg(sensors.gps_gamma))
 
     def process_app(self):
         self._plotter.process_app(0)

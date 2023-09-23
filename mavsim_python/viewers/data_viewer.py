@@ -47,6 +47,7 @@ class DataViewer:
                                        window_length=self._data_window_length)
         self._plotter.create_plot_widget(plot_id='wind', xlabel='Time (s)', ylabel='wind (m/s)',
                                        window_length=self._data_window_length)
+        # TODO: add dashed marker style
         self._plotter.create_data_set(plot_id="pn", data_label="pn", data_color=truth_color)
         self._plotter.create_data_set(plot_id="pn", data_label="pn_e", data_color=estimate_color) 
         self._plotter.create_data_set(plot_id="pe", data_label="pe", data_color=truth_color)

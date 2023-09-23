@@ -48,7 +48,7 @@ if SENSOR_PLOTS:
 
 # initialize elements of the architecture
 wind = WindSimulation(SIM.ts_simulation)
-mav = MavDynamics(SIM.ts_simulation)
+mav = MavDynamics(SIM.ts_simulation, use_biases=True, debug=False)
 autopilot = Autopilot(SIM.ts_simulation)
 
 # autopilot commands
