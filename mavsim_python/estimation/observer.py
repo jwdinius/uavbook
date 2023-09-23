@@ -18,8 +18,7 @@ from message_types.msg_state import MsgState, MAX_WIND
 from message_types.msg_sensors import MsgSensors
 from scipy.optimize import minimize
 
-SIGMA_FILE = "sigma.txt"
-ACCEL_MODEL_ERROR_SIGMA = 0.7  # m/s**2
+ACCEL_MODEL_ERROR_SIGMA = 0.7  # m/s**2; estimate of acceleration model error from pg. 157
 
 
 class Observer:
@@ -372,9 +371,9 @@ class EkfPosition:
             (0.005)**2,  # pn
             (0.005)**2,  # pe
             (0.005)**2,  # h
-            (0.005)**2,  # Vg
-            np.radians(0.005)**2,  # chi
-            np.radians(0.005)**2,  # gamma
+            (0.1)**2,  # Vg
+            np.radians(0.01)**2,  # chi
+            np.radians(0.01)**2,  # gamma
             (0.1)**2,  # wn  # XXX unsure of wind dynamics, so pad the process noise accordingly
             (0.1)**2,  # we
             (0.1)**2,  # wd
