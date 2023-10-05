@@ -6,8 +6,8 @@ mavsim_python
         2/24/2020 - RWB
 """
 #AP_MODEL = "PID"
-#AP_MODEL = "LQR"
-AP_MODEL = "TECS"
+AP_MODEL = "LQR"
+#AP_MODEL = "TECS"
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -89,7 +89,7 @@ altitude_command = Signals(dc_offset=true_state_copy.altitude,
                            start_time=0.0,
                            frequency=0.02)
 course_command = Signals(dc_offset=true_state_copy.chi,
-                         amplitude=np.radians(180),
+                         amplitude=np.radians(90),
                          start_time=5.0,
                          frequency=0.015)
 roll_feedforward_command = Signals(dc_offset=0,

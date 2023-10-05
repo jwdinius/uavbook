@@ -72,13 +72,13 @@ class Autopilot:
         # use Bryson's rule for tuning the diagonal terms of Q, R:
         # i.e., take the maximum acceptable value of each state/input term
         # and square it, then invert it
-        max_delta_sideslip = np.radians(30)
+        max_delta_sideslip = np.radians(10)
         max_delta_p = 5
         max_delta_r = max_delta_p
         max_delta_phi = np.radians(30)
-        max_delta_chi = np.radians(180)
-        max_settle_time_chi = 25
-        max_settle_time_sideslip = 25  # go easy on the integrators to avoid overshoot
+        max_delta_chi = np.radians(90)
+        max_settle_time_chi = 5
+        max_settle_time_sideslip = 5  # if this value is too large, the control response will be sluggish 
         max_sideslip_int = 0.5 * max_delta_sideslip * max_settle_time_sideslip  # area of a triangle with base == settle time and height == max angle (expected worst-case step delta)
         max_chi_int = 0.5 * max_delta_chi * max_settle_time_chi
         self.max_delta_aileron = np.radians(45)
@@ -116,8 +116,8 @@ class Autopilot:
         max_delta_q = 5
         max_delta_theta = np.radians(30)
         max_delta_altitude = 50
-        max_settle_time_altitude = 25
-        max_settle_time_airspeed = 25
+        max_settle_time_altitude = 5
+        max_settle_time_airspeed = 5
         max_altitude_int = 0.5 * max_delta_altitude * max_settle_time_altitude
         max_airspeed_int = 0.5 * max_delta_airspeed * max_settle_time_airspeed
         self.max_delta_elevator = np.radians(45)
