@@ -83,14 +83,24 @@ class Autopilot:
                         Ts=ts_control)
 
         # instantiate TECS controllers
+        self.throttle_correction_from_airspeed = PIControl(
+                        kp=0.3,
+                        ki=0.3,
+                        Ts=ts_control,
+                        limit=0.1)
+        self.pitch_correction_from_altitude = PIControl(
+                        kp=0.1,
+                        ki=0.1,
+                        Ts=ts_control,
+                        limit=np.radians(5))
         self.pitch_from_elevator = PDControlWithRate(
                         kp=AP.pitch_kp_tecs,
                         kd=AP.pitch_kd_tecs,
                         limit=np.radians(45))
-        self.k_T = 0.4
-        self.k_D = 0.6  # recommended > k_T 
-        self.k_Va = 0.6  # 1 / time constant for first-order acceleration model
-        self.k_h = 0.6  # 1 / time constant for first-order climb rate model
+        self.k_T = 0.25
+        self.k_D = 0.45  # recommended > k_T 
+        self.k_Va = 0.8  # 1 / time constant for first-order acceleration model
+        self.k_h = 0.8  # 1 / time constant for first-order climb rate model
         self.delta_t_d1 = 0.5
         self.theta_c_max = np.radians(45)
         self.Ts = ts_control
@@ -133,7 +143,7 @@ class Autopilot:
         E_T_des_dot = E_K_des_dot + E_P_des_dot
         E_K_tilde = E_K_des - E_K
         E_P_tilde = E_P_des - E_P
-        E_T_tilde = E_K_tilde + E_P_tilde
+        E_T_tilde = E_P_tilde + E_K_tilde
         
         ## thrust
         Tc = state.F_drag + (E_T_des_dot + self.k_T * E_T_tilde) / state.Va
@@ -148,12 +158,18 @@ class Autopilot:
             delta.throttle = saturate(delta_t, 0, 1)
             self.delta_t_d1 = delta.throttle
 
+        delta.throttle += self.throttle_correction_from_airspeed.update(cmd.airspeed_command, state.Va)
+
         ## pitch angle
         sin_gamma_c = h_des_dot / state.Va + ( (self.k_T - self.k_D) * E_K_tilde + (self.k_T + self.k_D) * E_P_tilde ) / ( 2 * MAV.mass * MAV.gravity * state.Va ) 
-        
+            
         sin_gamma_c_sat = saturate(sin_gamma_c, -np.sin(self.theta_c_max), np.sin(self.theta_c_max))
-        # theta_c = gamma + alpha
-        theta_c = saturate(np.arcsin(sin_gamma_c_sat) + state.alpha, -self.theta_c_max, self.theta_c_max)
+        # theta_c - alpha = gamma_a
+        # - gamma_a is the air mass referenced flight path angle.  When wind velocity
+        # - is 0, gamma = gamma_a.
+        theta_c = state.alpha + np.arcsin(sin_gamma_c_sat)
+        theta_c += self.pitch_correction_from_altitude.update(cmd.altitude_command, state.altitude)
+            
         delta.elevator = self.pitch_from_elevator.update(theta_c, state.theta, state.q)
         
         # construct output and commanded states

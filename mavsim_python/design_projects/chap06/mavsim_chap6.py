@@ -6,8 +6,8 @@ mavsim_python
         2/24/2020 - RWB
 """
 #AP_MODEL = "PID"
-AP_MODEL = "LQR"
-#AP_MODEL = "TECS"
+#AP_MODEL = "LQR"
+AP_MODEL = "TECS"
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -59,6 +59,7 @@ if PLOTS:
 # initialize elements of the architecture
 #wind = WindSimulation(SIM.ts_simulation)
 wind = WindSimulation(SIM.ts_simulation, steady_state=np.array([[1.5, 1, 2]]).T)
+#wind = WindSimulation(SIM.ts_simulation, steady_state=np.array([[1.5, 1, 0]]).T)
 mav = MavDynamics(SIM.ts_simulation)
 autopilot = Autopilot(SIM.ts_simulation)
 
