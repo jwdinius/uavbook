@@ -14,13 +14,15 @@ sigma = 0  # low pass filter gain for derivative
 
 #----------roll loop-------------
 # get transfer function data for delta_a to phi
-wn_roll = 10
+#wn_roll = 10  # Ch. 6
+wn_roll = 7.5  # Ch. 8
 zeta_roll = 0.8
 roll_kp = wn_roll**2 / TF.a_phi2
 roll_kd = (2 * zeta_roll * wn_roll - TF.a_phi1) / TF.a_phi2
 
 #----------course loop-------------
-W_course = 15  # XXX >= 1, book recommends between 5 and 10
+#W_course = 15  # XXX >= 1, book recommends between 5 and 10, Ch. 6
+W_course = 25  # Ch. 8
 wn_course = wn_roll / W_course
 zeta_course = 0.5 * np.sqrt(2)
 course_kp = 2 * zeta_course * wn_course * Vg0 / gravity
@@ -31,17 +33,15 @@ yaw_damper_p_wo = 0.5
 yaw_damper_kr = 0.5
 
 #----------pitch loop-------------
-wn_pitch = 50  # XXX if this number is too small, the plane will fall out of the sky (literally)
-zeta_pitch = 1.5
+#wn_pitch = 50  # XXX if this number is too small, the plane will fall out of the sky (literally)
+wn_pitch = 40  # XXX if this number is too small, the plane will fall out of the sky (literally)
+#zeta_pitch = 1.5
+zeta_pitch = 1.2
 pitch_kp = (wn_pitch**2 - TF.a_theta2) / TF.a_theta3
 pitch_kd = (2. * zeta_pitch * wn_pitch - TF.a_theta1) / TF.a_theta3
 K_theta_DC = pitch_kp * TF.a_theta3 / (TF.a_theta2 + pitch_kp * TF.a_theta3)
 
 # FOR TECS
-k_T_tecs = 0.25
-k_D_tecs = 0.45  # recommended > k_T 
-k_Va_tecs = 0.8  # 1 / time constant for first-order acceleration model
-k_h_tecs = 0.8  # 1 / time constant for first-order climb rate model
 wn_pitch_tecs = 20
 zeta_pitch_tecs = 1.5
 pitch_kp_tecs = (wn_pitch_tecs**2 - TF.a_theta2) / TF.a_theta3
@@ -67,6 +67,3 @@ wn_airspeed_throttle = 5.
 zeta_airspeed_throttle = np.sqrt(2)
 airspeed_throttle_kp = (2 * zeta_airspeed_throttle * wn_airspeed_throttle - TF.a_V1) / TF.a_V2
 airspeed_throttle_ki = wn_airspeed_throttle**2 / TF.a_V2
-
-#---------controller limits--------------------
-max_elevator = np.radians(45) 

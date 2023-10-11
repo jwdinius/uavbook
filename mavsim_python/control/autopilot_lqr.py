@@ -12,11 +12,17 @@ sys.path.append(os.environ["UAVBOOK_HOME"])
 import numpy as np
 from numpy import array, sin, cos, radians, concatenate, zeros, diag
 from scipy.linalg import solve_continuous_are, inv
-import parameters.control_parameters as AP
 from tools.wrap import wrap
 import design_projects.chap05.model_coef as M
 from message_types.msg_state import MsgState
 from message_types.msg_delta import MsgDelta
+
+USE_TRUTH=True
+if USE_TRUTH:
+    import parameters.control_parameters as AP
+else:
+    import parameters.control_parameters_estimator as AP
+
 
 
 def saturate(inp, low_limit, up_limit):

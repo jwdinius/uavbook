@@ -4,59 +4,31 @@ autopilot block for mavsim_python - Total Energy Control System
     - Last Update:
         2/14/2020 - RWB
 """
+import os
 import sys
 import numpy as np
 sys.path.append('..')
-import parameters.control_parameters as AP
 import parameters.aerosonde_parameters as MAV
 from control.tf_control import TFControl
+from control.create_throttle_lut import calculate_motor_thrust
 from tools.wrap import wrap
 from control.pi_control import PIControl
 from control.pd_control_with_rate import PDControlWithRate
 from message_types.msg_state import MsgState
 from message_types.msg_delta import MsgDelta
-from scipy.optimize import root
+from scipy.interpolate import RegularGridInterpolator
 
-def saturate(inp, low_limit, up_limit):
-    if inp <= low_limit:
-        output = low_limit
-    elif inp >= up_limit:
-        output = up_limit
-    else:
-        output = inp
-    return output
+USE_TRUTH=True
+MAX_LUT_ERROR_SQ=5e-2
 
-def calculate_motor_thrust(delta_t, airspeed):
-    # compute thrust due to propeller (copied from mav_dynamics_control)
-    # XXX For high fidelity model details; see Chapter 4 slides here https://drive.google.com/file/d/1BjJuj8QLWV9E1FX6sHVHXIGaIizUaAJ5/view?usp=sharing (particularly Slides 30-35)
-    # map delta.throttle throttle command(0 to 1) into motor input voltage
-    #v_in =
-    V_in = MAV.V_max * delta_t
+if USE_TRUTH:
+    import parameters.control_parameters as AP
+else:
+    import parameters.control_parameters_estimator as AP
 
-    # Angular speed of propeller (omega_p = ?)
-    a = MAV.C_Q0 * MAV.rho * MAV.D_prop**5 / (2 * np.pi)**2
-    b = MAV.rho * MAV.D_prop**4 * MAV.C_Q1 * airspeed / (2 * np.pi)  + MAV.KQ**2 / MAV.R_motor
-    c = MAV.rho * MAV.D_prop**3 * MAV.C_Q2 * airspeed**2 - (MAV.KQ * V_in) / MAV.R_motor + MAV.KQ * MAV.i0
 
-    # use the positive root
-    Omega_op = (-b + np.sqrt(b**2 - 4 * a * c)) / (2 * a)
-
-    # thrust and torque due to propeller
-    J_op = (2 * np.pi * airspeed) / (Omega_op * MAV.D_prop)
-
-    C_T = MAV.C_T2 * J_op**2 + MAV.C_T1 * J_op + MAV.C_T0
-
-    n = Omega_op / (2 * np.pi)
-
-    return MAV.rho * n**2 * MAV.D_prop**4 * C_T  # == thrust_prop
-
-def compute_throttle_from_thrust(T_des, x_init, airspeed):
-    def fn(_delta_t, _airspeed, _T_des):
-        return calculate_motor_thrust(_delta_t, _airspeed) - _T_des
-    optimal_delta_t = root(fn, x_init, args=(airspeed, T_des))
-    if not optimal_delta_t.success:
-        return None
-    return optimal_delta_t.x[0]
+def obj_fn(_delta_t, _airspeed, _T_des):
+    return (calculate_motor_thrust(_delta_t, _airspeed) - _T_des)**2
 
 class Autopilot:
     def __init__(self, ts_control):
@@ -84,25 +56,40 @@ class Autopilot:
 
         # instantiate TECS controllers
         self.throttle_correction_from_airspeed = PIControl(
-                        kp=0.3,
-                        ki=0.3,
+                        kp=AP.throttle_correction_kp_tecs,
+                        ki=AP.throttle_correction_ki_tecs,
                         Ts=ts_control,
-                        limit=0.1)
+                        limit=AP.throttle_correction_limit)
         self.pitch_correction_from_altitude = PIControl(
-                        kp=0.1,
-                        ki=0.1,
+                        kp=AP.altitude_correction_kp_tecs,
+                        ki=AP.altitude_correction_ki_tecs,
                         Ts=ts_control,
-                        limit=np.radians(5))
+                        limit=AP.altitude_correction_limit)
         self.pitch_from_elevator = PDControlWithRate(
                         kp=AP.pitch_kp_tecs,
                         kd=AP.pitch_kd_tecs,
-                        limit=np.radians(45))
-        self.k_T = 0.25
-        self.k_D = 0.45  # recommended > k_T 
-        self.k_Va = 0.8  # 1 / time constant for first-order acceleration model
-        self.k_h = 0.8  # 1 / time constant for first-order climb rate model
+                        limit=AP.max_elevator)
+        self.k_T = AP.k_T_tecs 
+        self.k_D = AP.k_D_tecs 
+        self.k_Va = AP.k_Va_tecs 
+        self.k_h = AP.k_h_tecs
+
+        
+        with open(os.environ["UAVBOOK_HOME"] + "/control/tecs_thrust_lut.txt", "r") as f:
+            lines = f.readlines()
+        self.thrust_min, self.thrust_max, thrust_size = [float(x) for x in lines[0].split(",")]
+        thrust_x = np.linspace(self.thrust_min, self.thrust_max, int(thrust_size))
+        airspeed_min, airspeed_max, airspeed_size = [float(x) for x in lines[1].split(",")]
+        airspeed_x = np.linspace(airspeed_min, airspeed_max, int(airspeed_size))
+        X, _ = np.meshgrid(thrust_x, airspeed_x, indexing="ij")
+        Z = np.zeros_like(X)
+        for line in lines[2:]:
+            i, j, _, _, throttle = [float(x) for x in line.split(",")]
+            Z[int(j), int(i)] = throttle
+        self.throttle_lut = RegularGridInterpolator((thrust_x, airspeed_x), Z, method='cubic')
+
         self.delta_t_d1 = 0.5
-        self.theta_c_max = np.radians(45)
+        self.theta_c_max = AP.max_elevator
         self.Ts = ts_control
         self.commanded_state = MsgState()
 
@@ -147,27 +134,36 @@ class Autopilot:
         
         ## thrust
         Tc = state.F_drag + (E_T_des_dot + self.k_T * E_T_tilde) / state.Va
-        # convert thrust command to throttle command
-        ## solve T_c - calculate_motor_thrust(state.Va, delta_t) = 0 for delta_t
-        ## initialize the root finder with previous estimate
-        delta_t = compute_throttle_from_thrust(Tc, self.delta_t_d1, state.Va)
-        if delta_t is None:
-            print("Throttle calculation FAILED, using previous value")
-            delta.throttle = self.delta_t_d1 
+        
+        # lookup throttle command
+        if Tc < self.thrust_min:
+            delta.throttle = 0.
+        elif Tc > self.thrust_max:
+            delta.throttle = 1.
         else:
-            delta.throttle = saturate(delta_t, 0, 1)
-            self.delta_t_d1 = delta.throttle
+            throttle = self.throttle_lut((Tc, state.Va))
+            if obj_fn(throttle, state.Va, Tc) > MAX_LUT_ERROR_SQ:
+                # lookup has unacceptable error, use previous value
+                delta.throttle = self.delta_t_d1
+            else:
+                delta.throttle = throttle
 
+        # deal with steady-state error
         delta.throttle += self.throttle_correction_from_airspeed.update(cmd.airspeed_command, state.Va)
+
+        # saturate
+        delta.throttle = self.saturate(delta.throttle, 0, 1)
 
         ## pitch angle
         sin_gamma_c = h_des_dot / state.Va + ( (self.k_T - self.k_D) * E_K_tilde + (self.k_T + self.k_D) * E_P_tilde ) / ( 2 * MAV.mass * MAV.gravity * state.Va ) 
             
-        sin_gamma_c_sat = saturate(sin_gamma_c, -np.sin(self.theta_c_max), np.sin(self.theta_c_max))
+        sin_gamma_c_sat = self.saturate(sin_gamma_c, -np.sin(self.theta_c_max), np.sin(self.theta_c_max))
         # theta_c - alpha = gamma_a
         # - gamma_a is the air mass referenced flight path angle.  When wind velocity
         # - is 0, gamma = gamma_a.
         theta_c = state.alpha + np.arcsin(sin_gamma_c_sat)
+        
+        # deal with steady-state error
         theta_c += self.pitch_correction_from_altitude.update(cmd.altitude_command, state.altitude)
             
         delta.elevator = self.pitch_from_elevator.update(theta_c, state.theta, state.q)
@@ -179,13 +175,15 @@ class Autopilot:
         self.commanded_state.theta = theta_c
         self.commanded_state.chi = cmd.course_command
         
+        self.delta_t_d1 = delta.throttle
+        
         return delta, self.commanded_state
 
-    def saturate(self, input, low_limit, up_limit):
-        if input <= low_limit:
+    def saturate(self, _input, low_limit, up_limit):
+        if _input <= low_limit:
             output = low_limit
-        elif input >= up_limit:
+        elif _input >= up_limit:
             output = up_limit
         else:
-            output = input
+            output = _input
         return output
