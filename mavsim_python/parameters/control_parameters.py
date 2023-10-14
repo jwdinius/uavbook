@@ -37,7 +37,50 @@ pitch_kp = (wn_pitch**2 - TF.a_theta2) / TF.a_theta3
 pitch_kd = (2. * zeta_pitch * wn_pitch - TF.a_theta1) / TF.a_theta3
 K_theta_DC = pitch_kp * TF.a_theta3 / (TF.a_theta2 + pitch_kp * TF.a_theta3)
 
-# FOR TECS
+#----------altitude loop-------------
+W_altitude = 50  # XXX >= 1, book recommends between 5 and 10, too small and the step response rings a lot
+wn_altitude = wn_pitch / W_altitude
+zeta_altitude = 1.
+altitude_kp = 2 * zeta_altitude * wn_altitude / (K_theta_DC * Va0) 
+altitude_ki = wn_altitude**2 / (K_theta_DC * Va0)
+
+#---------airspeed hold using throttle---------------
+wn_airspeed_throttle = 5.
+zeta_airspeed_throttle = np.sqrt(2)
+airspeed_throttle_kp = (2 * zeta_airspeed_throttle * wn_airspeed_throttle - TF.a_V1) / TF.a_V2
+airspeed_throttle_ki = wn_airspeed_throttle**2 / TF.a_V2
+
+#---------controller limits--------------------
+max_aileron = np.radians(45)
+max_rudder = np.radians(30)
+max_elevator = np.radians(45)
+
+#---------command limits--------------------
+max_roll = np.radians(45)
+max_pitch = np.radians(30)
+altitude_zone = 15  # h_hold from book/notes
+
+## LQR
+max_delta_sideslip = np.radians(10)
+max_delta_p = 5
+max_delta_r = max_delta_p
+max_delta_phi = np.radians(30)
+max_delta_chi = np.radians(90)
+max_settle_time_chi = 5
+max_settle_time_sideslip = 5  # if this value is too large, the control response will be sluggish 
+max_sideslip_int = 0.5 * max_delta_sideslip * max_settle_time_sideslip  # area of a triangle with base == settle time and height == max angle (expected worst-case step delta)
+max_chi_int = 0.5 * max_delta_chi * max_settle_time_chi
+max_delta_airspeed = 20
+max_delta_alpha = np.radians(20)
+max_delta_q = 5
+max_delta_theta = np.radians(30)
+max_delta_altitude = 50
+max_settle_time_altitude = 5
+max_settle_time_airspeed = 5
+max_altitude_int = 0.5 * max_delta_altitude * max_settle_time_altitude
+max_airspeed_int = 0.5 * max_delta_airspeed * max_settle_time_airspeed
+
+## TECS
 k_T_tecs = 0.25
 k_D_tecs = 0.45  # recommended > k_T 
 k_Va_tecs = 0.8  # 1 / time constant for first-order acceleration model
@@ -54,19 +97,3 @@ altitude_correction_kp_tecs = 0.1
 altitude_correction_ki_tecs = 0.1
 altitude_correction_limit = np.radians(5)
 
-#----------altitude loop-------------
-W_altitude = 50  # XXX >= 1, book recommends between 5 and 10, too small and the step response rings a lot
-wn_altitude = wn_pitch / W_altitude
-zeta_altitude = 1.
-altitude_kp = 2 * zeta_altitude * wn_altitude / (K_theta_DC * Va0) 
-altitude_ki = wn_altitude**2 / (K_theta_DC * Va0)
-altitude_zone = 15  # h_hold from book/notes
-
-#---------airspeed hold using throttle---------------
-wn_airspeed_throttle = 5.
-zeta_airspeed_throttle = np.sqrt(2)
-airspeed_throttle_kp = (2 * zeta_airspeed_throttle * wn_airspeed_throttle - TF.a_V1) / TF.a_V2
-airspeed_throttle_ki = wn_airspeed_throttle**2 / TF.a_V2
-
-#---------controller limits--------------------
-max_elevator = np.radians(45) 

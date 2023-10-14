@@ -13,6 +13,8 @@ import parameters.simulation_parameters as SIM
 from tools.signals import Signals
 from models.mav_dynamics_sensors import MavDynamics
 from models.wind_simulation import WindSimulation
+from models.trim import compute_trim
+#from control.autopilot_hybrid import Autopilot  # XXX needs tuning
 from control.autopilot import Autopilot
 from estimation.observer import Observer
 # from estimation.observer_full import Observer
@@ -54,7 +56,7 @@ if SENSOR_PLOTS:
 # initialize elements of the architecture
 wind = WindSimulation(SIM.ts_simulation, steady_state = np.array([[1., -1.2, -0.4]]).T)
 mav = MavDynamics(SIM.ts_simulation, use_biases=False, debug=False)
-autopilot = Autopilot(SIM.ts_simulation)
+autopilot = Autopilot(SIM.ts_simulation, use_truth=False)
 observer = Observer(SIM.ts_simulation, initial_measurements=mav.sensors())
 
 # autopilot commands
@@ -77,6 +79,18 @@ chi_command = Signals(dc_offset=np.radians(0.0),
 sim_time = SIM.start_time
 end_time = 100
 
+Va = 25.
+gamma = np.radians(0)
+trim_state, trim_input = compute_trim(mav, Va, gamma)
+mav._state = trim_state  # set the initial state of the mav to the trim state
+mav._update_true_state()
+
+#true_state_copy = deepcopy(mav.true_state)
+#autopilot.set_trim_state(true_state_copy)
+#autopilot.set_trim_input(trim_input)
+
+delta_prev = trim_input
+
 # main simulation loop
 print("Press 'Esc' to exit...")
 while sim_time < end_time:
@@ -88,9 +102,11 @@ while sim_time < end_time:
 
     # -------- autopilot -------------
     measurements = mav.sensors()  # get sensor measurements
+    observer.set_elevator(delta_prev.elevator)
     estimated_state = observer.update(measurements)  # estimate states from measurements
     delta, commanded_state = autopilot.update(commands, estimated_state)
-
+    delta_prev = delta
+    
     # -------- physical system -------------
     current_wind = wind.update(mav.true_state.altitude, mav.true_state.Va)  # get the new wind vector
     mav.update(delta, current_wind)  # propagate the MAV dynamics
@@ -102,7 +118,7 @@ while sim_time < end_time:
         plot_time = sim_time
         data_view.update(mav.true_state,  # true states
                          estimated_state,  # estimated states
-                         None,  # commanded states
+                         commanded_state,  # commanded states
                          delta)  # inputs to aircraft
     if SENSOR_PLOTS:
         sensor_view.update(measurements)

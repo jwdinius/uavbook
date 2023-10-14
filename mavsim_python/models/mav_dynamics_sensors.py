@@ -441,8 +441,8 @@ class MavDynamics:
         self.true_state.bx = SENSOR.gyro_x_bias
         self.true_state.by = SENSOR.gyro_y_bias
         self.true_state.bz = SENSOR.gyro_z_bias
-        self.true_state.camera_az = self._state.item(13)
-        self.true_state.camera_el = self._state.item(14)
+        #self.true_state.camera_az = self._state.item(13)
+        #self.true_state.camera_el = self._state.item(14)
         # to get an idea of model error with model on pg. 157:
         #with open("accel_errors.txt", "a") as f:
         #    p, q, r = [self._state.item(i) for i in range(10, 13)]

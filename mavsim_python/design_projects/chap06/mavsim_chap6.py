@@ -7,7 +7,8 @@ mavsim_python
 """
 #AP_MODEL = "PID"
 #AP_MODEL = "LQR"
-AP_MODEL = "TECS"
+#AP_MODEL = "TECS"
+AP_MODEL = "HYBR"
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -26,8 +27,10 @@ if AP_MODEL == "LQR":
     from control.autopilot_lqr import Autopilot
 elif AP_MODEL == "TECS":
     from control.autopilot_tecs import Autopilot
-else:  # PID
+elif AP_MODEL == "PID":
     from control.autopilot import Autopilot
+else:
+    from control.autopilot_hybrid import Autopilot
 from viewers.mav_viewer import MavViewer
 from viewers.data_viewer import DataViewer
 from tools.quit_listener import QuitListener
@@ -57,26 +60,23 @@ if PLOTS:
                            data_recording_period=SIM.ts_plot_record_data, time_window_length=30)
 
 # initialize elements of the architecture
-#wind = WindSimulation(SIM.ts_simulation)
 wind = WindSimulation(SIM.ts_simulation, steady_state=np.array([[1.5, 1, 2]]).T)
-#wind = WindSimulation(SIM.ts_simulation, steady_state=np.array([[1.5, 1, 0]]).T)
 mav = MavDynamics(SIM.ts_simulation)
-autopilot = Autopilot(SIM.ts_simulation)
+autopilot = Autopilot(SIM.ts_simulation, use_truth=True)
 
 # get the trim condition for the vehicle
 # use compute_trim function to compute trim state and trim input
 # for wings-level, constant speed flight
 Va = 25.
-gamma = 0 * np.pi/180.
+gamma = np.radians(0)
 trim_state, trim_input = compute_trim(mav, Va, gamma)
 mav._state = trim_state  # set the initial state of the mav to the trim state
 mav._update_true_state()
 
 true_state_copy = deepcopy(mav.true_state)
-if AP_MODEL == "LQR":
+if AP_MODEL in ("LQR", "HYBR"):
     autopilot.set_trim_state(true_state_copy)
-
-autopilot.set_trim_input(trim_input)
+    autopilot.set_trim_input(trim_input)
 
 # autopilot commands
 from message_types.msg_autopilot import MsgAutopilot

@@ -61,6 +61,9 @@ class Observer:
 
         # ekf for pn, pe, Vg, chi, wn, we, psi
         self.position_ekf = EkfPosition(initial_measurements, self.estimated_state)
+    
+    def set_elevator(self, _elevator):
+        self.position_ekf.set_elevator(_elevator)
 
     def update(self, measurement):
         ##### TODO #####
@@ -94,11 +97,11 @@ class Observer:
         alpha_beta = estimate_wind_quantities(self.position_ekf.xhat, measurement, self.estimated_state)
         C_wind = jacobian(estimate_wind_quantities, self.position_ekf.xhat, measurement, self.estimated_state)
         P_wind = C_wind @ self.position_ekf.P @ C_wind.T
-        var_alpha, var_beta = np.diag(P_wind)
-        self.estimated_state.alpha = alpha_beta.item(0)
-        self.estimated_state.sigma_alpha = np.sqrt(var_alpha)
-        self.estimated_state.beta = alpha_beta.item(1)
-        self.estimated_state.sigma_beta = np.sqrt(var_beta)
+        #var_alpha, var_beta = np.diag(P_wind)
+        #self.estimated_state.alpha = alpha_beta.item(0)
+        #self.estimated_state.sigma_alpha = np.sqrt(var_alpha)
+        #self.estimated_state.beta = alpha_beta.item(1)
+        #self.estimated_state.sigma_beta = np.sqrt(var_beta)
         # not estimating these
         self.estimated_state.bx = 0.0
         self.estimated_state.by = 0.0
@@ -162,7 +165,7 @@ class EkfAttitude:
         ##### TODO #####
         # select process noise for post-integration step
         # trust the model; it matches the EOM in the simulation
-        self.Q = np.diag([np.radians(0.005)**2, np.radians(0.005)**2, np.radians(0.005)**2])
+        self.Q = np.diag([np.radians(0.005)**2, np.radians(0.005)**2, np.radians(0.0001)**2])
         self.Q_scaling = 1.
         # R_accel has to account for assumptions in the model, plus the noise on state inputs, plus the actual measurement noise
         self.R_accel = np.diag([
@@ -183,7 +186,7 @@ class EkfAttitude:
             sigma_psi = np.radians(60)
         else:
             psi = psi_meas
-            sigma_psi = np.radians(10./3)
+            sigma_psi = np.radians(2)
         self.xhat = np.array([[phi], [theta], [psi]])
         self.P = np.diag([np.radians(10./3)**2, np.radians(10./3)**2, sigma_psi**2])
         self.Ts = SIM.ts_control/self.N
@@ -316,9 +319,9 @@ class EkfAttitude:
             L = P @ C.T @ S_inv
             self.xhat = xhat + L @ residual
             self.P = (np.eye(3) - L @ C) @ P
-            self.Q_scaling = 100*(mahalonobis_distance_sq / gate_threshold) 
+            self.Q_scaling = 10*(mahalonobis_distance_sq / gate_threshold) 
         else:
-            self.Q_scaling = 1000 * (mahalonobis_distance_sq / gate_threshold)
+            self.Q_scaling = 100 * (mahalonobis_distance_sq / gate_threshold)
 
 def estimate_wind_quantities(x, measurement, state):
     Vg, chi, gamma, wn, we, wd = [x.item(i) for i in range(3, 9)]
@@ -371,12 +374,12 @@ class EkfPosition:
             (0.005)**2,  # pn
             (0.005)**2,  # pe
             (0.005)**2,  # h
-            (0.1)**2,  # Vg
+            (0.005)**2,  # Vg
             np.radians(0.01)**2,  # chi
             np.radians(0.01)**2,  # gamma
-            (0.1)**2,  # wn  # XXX unsure of wind dynamics, so pad the process noise accordingly
-            (0.1)**2,  # we
-            (0.1)**2,  # wd
+            (0.01)**2,  # wn  # XXX unsure of wind dynamics, so pad the process noise accordingly
+            (0.01)**2,  # we
+            (0.01)**2,  # wd
         ])
         self.Q_scaling = 1.
  
@@ -392,6 +395,9 @@ class EkfPosition:
         
         self.gate_threshold_pseudo = stats.chi2.isf(q=0.05, df=3)
         self.gate_threshold_gps = stats.chi2.isf(q=0.05, df=6)
+
+    def set_elevator(self, _elevator):
+        self.elevator = _elevator
 
     def update(self, measurement, state):
         self.propagate_model(measurement, state)
@@ -414,6 +420,21 @@ class EkfPosition:
         state.sigma_we = np.sqrt(self.P[7, 7])
         state.wd = self.xhat.item(8)
         state.sigma_wd = np.sqrt(self.P[8, 8])
+
+        h_dot = state.Vg * np.sin(state.gamma)
+        a = (h_dot - state.wd) / state.Va
+        b = np.sign(a) * min(abs(a), np.sin( np.radians(20) )) 
+
+        gamma_a = np.arcsin(b)
+        state.alpha = gamma_a - state.theta 
+        state.sigma_alpha = np.radians(5)  # TODO do the calculation
+
+        ## Drag coefficient: C_D(\alpha)
+        C_D = MAV.C_D_p + (MAV.C_L_0 + MAV.C_L_alpha * state.alpha)**2 / (np.pi * MAV.e * MAV.AR)
+
+        # compute Lift and Drag Forces (F_lift, F_drag)
+        aero_force_scaling = 0.5 * MAV.rho * state.Va**2 * MAV.S_wing
+        state.F_drag = aero_force_scaling * (C_D + 0.5 * MAV.C_D_q * MAV.c / state.Va * state.q + MAV.C_D_delta_e * self.elevator)
 
     def f(self, x, measurement, state):
         # system dynamics for propagation model: xdot = f(x, u)
@@ -474,7 +495,7 @@ class EkfPosition:
         f_ = np.array([
             [Vn],
             [Ve],
-            [Vd],
+            [Vd],  # Vd is climb rate
             [Vg_dot],
             [chi_dot],
             [gamma_dot],
@@ -507,9 +528,9 @@ class EkfPosition:
             (m+1)*SENSOR.gps_n_sigma**2,
             (m+1)*SENSOR.gps_e_sigma**2,
             (m+1)*SENSOR.gps_h_sigma**2,
-            SENSOR.gps_Vg_sigma**2,
-            SENSOR.gps_Vg_sigma**2 / (Vn**2 + Ve**2),
-            SENSOR.gps_Vg_sigma**2 / Vg**2
+            10*SENSOR.gps_Vg_sigma**2,
+            10*SENSOR.gps_Vg_sigma**2 / (Vn**2 + Ve**2),
+            10*SENSOR.gps_Vg_sigma**2 / Vg**2
         ])
 
     def h_pseudo(self, x, measurement, state):
@@ -583,7 +604,8 @@ class EkfPosition:
         # account for error in psi, va, theta, and alpha
         x_s = np.array([[state.psi, state.Va, state.theta, state.theta]]).T
         J_s = jacobian(self.h_pseudo_s, x_s, measurement, xhat)
-        R_s = np.diag(np.array([state.sigma_psi**2, state.sigma_Va**2, state.sigma_theta**2, state.sigma_theta**2]))
+        # pad pseudo measurement noise
+        R_s = np.diag(500 * np.array([state.sigma_psi**2, state.sigma_Va**2, state.sigma_theta**2, state.sigma_theta**2]))
         R_pseudo = J_s @ R_s @ J_s.T
 
         S_pseudo = C_pseudo @ P @ C_pseudo.T + R_pseudo
@@ -594,9 +616,9 @@ class EkfPosition:
             L_pseudo = P @ C_pseudo.T @ S_pseudo_inv
             self.xhat = xhat + L_pseudo @ residual_pseudo
             self.P = (np.eye(9) - L_pseudo @ C_pseudo) @ P
-            self.Q_scaling = 100 * (mahalonobis_distance_pseudo / self.gate_threshold_pseudo)
+            self.Q_scaling = 10 * (mahalonobis_distance_pseudo / self.gate_threshold_pseudo)
         else:
-            self.Q_scaling = 5000 * (mahalonobis_distance_pseudo / self.gate_threshold_pseudo)
+            self.Q_scaling = 100 * (mahalonobis_distance_pseudo / self.gate_threshold_pseudo)
 
         # only update GPS when one of the signals changes
         # gps measurement model directly measures state, so no transform needed
@@ -625,7 +647,7 @@ class EkfPosition:
             S_gps_inv = np.linalg.inv(S_gps)
             residual_gps = y_gps - h_gps
             mahalonobis_distance_gps = float(residual_gps.T @ S_gps_inv @ residual_gps)
-            if mahalonobis_distance_gps < 1000:  # don't gate gps
+            if mahalonobis_distance_gps < 1000:  # XXX be more liberal with gps gating
                 L_gps = P @ C_gps.T @ S_gps_inv
                 self.xhat = xhat + L_gps @ residual_gps
                 self.P = (np.eye(9) - L_gps @ C_gps) @ P

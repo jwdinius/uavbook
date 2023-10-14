@@ -12,12 +12,22 @@ sys.path.append(os.environ["UAVBOOK_HOME"])
 import numpy as np
 from numpy import array, sin, cos, radians, concatenate, zeros, diag
 from scipy.linalg import solve_continuous_are, inv
+from control.create_throttle_lut import calculate_motor_thrust
+from control.pi_control import PIControl
+from control.pd_control_with_rate import PDControlWithRate
 from tools.wrap import wrap
 import design_projects.chap05.model_coef as M
+import parameters.aerosonde_parameters as MAV
 from message_types.msg_state import MsgState
 from message_types.msg_delta import MsgDelta
+from scipy.interpolate import RegularGridInterpolator
 from importlib import import_module
 
+MAX_LUT_ERROR_SQ=5e-2
+
+
+def obj_fn(_delta_t, _airspeed, _T_des):
+    return (calculate_motor_thrust(_delta_t, _airspeed) - _T_des)**2
 
 def saturate(inp, low_limit, up_limit):
     if inp <= low_limit:
@@ -52,12 +62,8 @@ class Autopilot:
         # initialize integrators and delay variables
         self.integratorSideslip = 0
         self.integratorCourse = 0
-        self.integratorAltitude = 0
-        self.integratorAirspeed = 0
         self.errorSideslipD1 = 0  # == error at last step; discrete representation of an integrator requires it ("D1" means "delay one")
         self.errorCourseD1 = 0
-        self.errorAltitudeD1 = 0
-        self.errorAirspeedD1 = 0
         # compute LQR gains
         
         #### TODO ######
@@ -96,30 +102,40 @@ class Autopilot:
         '''Longitudinal autopilot
         Objectives: drive vehicle to desired altitude and airspeed
         '''
-        CLon = array([[0, 0., 0., 0., 1.],
-                   [1., 0., 0., 0., 0.]])
-        CrLon = concatenate((-CLon, zeros((2, 2))), axis=1)
-        AAlon = concatenate((
-                    concatenate((M.A_lon_w_alpha, zeros((5,2))), axis=1),
-                    CrLon),
-                    axis=0)
-        BBlon = concatenate((M.B_lon_w_alpha, zeros((2, 2))), axis=0)
-        Qlon = diag([
-            self.AP.max_delta_airspeed**(-2),
-            self.AP.max_delta_alpha**(-2),
-            self.AP.max_delta_q**(-2),
-            self.AP.max_delta_theta**(-2),
-            self.AP.max_delta_altitude**(-2),
-            self.AP.max_altitude_int**(-2),
-            self.AP.max_airspeed_int**(-2)])
-        Rlon = diag([
-            self.AP.max_elevator**(-2),
-            1**(-2)]) # e, t
-        Plon = solve_continuous_are(AAlon, BBlon, Qlon, Rlon)
-        self.Klon_aug = inv(Rlon) @ BBlon.T @ Plon
-        self.Klon = self.Klon_aug[:, :5] 
-        self.Klon_i = self.Klon_aug[:, 5:] 
-        self.Klon_r = -inv(CLon @ inv(M.A_lon_w_alpha - M.B_lon_w_alpha @ self.Klon) @ M.B_lon_w_alpha)  # track reference inputs: h_c and Va_c
+        self.k_T = self.AP.k_T_tecs 
+        self.k_D = self.AP.k_D_tecs 
+        self.k_Va = self.AP.k_Va_tecs 
+        self.k_h = self.AP.k_h_tecs
+        self.pitch_from_elevator = PDControlWithRate(
+                        kp=self.AP.pitch_kp_tecs,
+                        kd=self.AP.pitch_kd_tecs,
+                        limit=self.AP.max_elevator)
+        self.throttle_correction_from_airspeed = PIControl(
+                        kp=self.AP.throttle_correction_kp_tecs,
+                        ki=self.AP.throttle_correction_ki_tecs,
+                        Ts=ts_control,
+                        limit=self.AP.throttle_correction_limit)
+        self.pitch_correction_from_altitude = PIControl(
+                        kp=self.AP.altitude_correction_kp_tecs,
+                        ki=self.AP.altitude_correction_ki_tecs,
+                        Ts=ts_control,
+                        limit=self.AP.altitude_correction_limit)
+
+        
+        with open(os.environ["UAVBOOK_HOME"] + "/control/tecs_thrust_lut.txt", "r") as f:
+            lines = f.readlines()
+        self.thrust_min, self.thrust_max, thrust_size = [float(x) for x in lines[0].split(",")]
+        thrust_x = np.linspace(self.thrust_min, self.thrust_max, int(thrust_size))
+        airspeed_min, airspeed_max, airspeed_size = [float(x) for x in lines[1].split(",")]
+        airspeed_x = np.linspace(airspeed_min, airspeed_max, int(airspeed_size))
+        X, _ = np.meshgrid(thrust_x, airspeed_x, indexing="ij")
+        Z = np.zeros_like(X)
+        for line in lines[2:]:
+            i, j, _, _, throttle = [float(x) for x in line.split(",")]
+            Z[int(j), int(i)] = throttle
+        self.throttle_lut = RegularGridInterpolator((thrust_x, airspeed_x), Z, method='cubic')
+
+        self.delta_t_d1 = 0.5
         self.commanded_state = MsgState()
 
     def set_trim_input(self, trim_input):
@@ -187,79 +203,68 @@ class Autopilot:
         self.integratorCourse += delta_z_lat.item(1)
 
         # longitudinal autopilot
-        # NOTE: `u` is not part of the state vector provided, so it must be reconstructed from airspeed, alpha, and beta (which is assumed to be ~0)
-        u = state.Va * np.cos(state.alpha) * np.cos(state.beta)
-        trim_u = self._trim_state.Va * np.cos(self._trim_state.alpha) * np.cos(self._trim_state.beta)
-        delta_u = u - trim_u 
-        delta_alpha = state.alpha - wrap(self._trim_state.alpha, state.alpha)
-        delta_q = state.q - self._trim_state.q
-        delta_theta = state.theta - wrap(self._trim_state.theta, state.theta)
-        delta_altitude = state.altitude - self._trim_state.altitude
+        # compute total energy error
+        E_K_des = 0.5 * MAV.mass * cmd.airspeed_command**2
+        E_P_des = MAV.mass * MAV.gravity * cmd.altitude_command
+        E_K = 0.5 * MAV.mass * state.Va**2
+        E_P = MAV.mass * MAV.gravity * state.altitude
+        # compute desired energy derivatives (assuming first order lag on airspeed and altitude errors)
+        airspeed_error = cmd.airspeed_command - state.Va
         altitude_error = cmd.altitude_command - state.altitude
-        # we _want_ alpha and beta to be near zero, so u ~ airspeed
-        airspeed_error = cmd.airspeed_command - u
-        self.integratorAltitude += 0.5 * self.Ts * (altitude_error + self.errorAltitudeD1)
-        self.integratorAirspeed += 0.5 * self.Ts * (airspeed_error + self.errorAirspeedD1)
+        Va_des_dot = self.k_Va * airspeed_error
+        h_des_dot = self.k_h * altitude_error
+
+        E_K_des_dot = MAV.mass * cmd.airspeed_command * Va_des_dot 
+        E_P_des_dot = MAV.mass * MAV.gravity * h_des_dot
+        E_T_des_dot = E_K_des_dot + E_P_des_dot
+        E_K_tilde = E_K_des - E_K
+        E_P_tilde = E_P_des - E_P
+        E_T_tilde = E_P_tilde + E_K_tilde
         
-        # states
-        x_lon = np.array([
-            [delta_u],
-            [delta_alpha],
-            [delta_q],
-            [delta_theta],
-            [delta_altitude]
-        ])
+        ## thrust
+        Tc = state.F_drag + (E_T_des_dot + self.k_T * E_T_tilde) / state.Va
+        
+        # lookup throttle command
+        if Tc < self.thrust_min:
+            throttle = 0.
+        elif Tc > self.thrust_max:
+            throttle = 1.
+        else:
+            print(f"{Tc}, {state.Va}")
+            throttle = self.throttle_lut((Tc, state.Va))
+            if obj_fn(throttle, state.Va, Tc) > MAX_LUT_ERROR_SQ:
+                # lookup has unacceptable error, use previous value
+                throttle = self.delta_t_d1
 
-        # augmented state (integrals)
-        z_lon = np.array([
-            [self.integratorAltitude],
-            [self.integratorAirspeed]
-        ])
+        # deal with steady-state error
+        throttle += self.throttle_correction_from_airspeed.update(cmd.airspeed_command, state.Va)
 
-        # reference input (which accounts for delta from trim)
-        y_d_lon = np.array([
-            [cmd.altitude_command - self._trim_state.altitude], 
-            [cmd.airspeed_command - trim_u]
-        ])
+        # saturate
+        throttle = saturate(throttle, 0, 1)
 
-        u_lon_star = np.array([
-            [self._trim_input.elevator],
-            [self._trim_input.throttle]
-        ])
-
-        # compute unsatured input, which is the sum of 4 terms:
-        # 1) trim input
-        # 2) reference tracking input: Kr @ y_d
-        # 3) state feedback: -K @ x
-        # 4) augmented state (integral) feedback: -Ki @ z
-        u_lon_unsat = u_lon_star + self.Klon_r @ y_d_lon - self.Klon @ x_lon  - self.Klon_i @ z_lon
-
-        # apply control saturation
-        u_lon_sat = np.array([
-            [saturate(u_lon_unsat.item(0), -self.AP.max_elevator, self.AP.max_elevator)],
-            [saturate(u_lon_unsat.item(1), 0, 1)]
-        ])
-
-        # apply antiwindup correction
-        delta_z_lon = integratorAntiWindup(self.Klon_i, z_lon, u_lon_unsat, u_lon_sat)
-        self.integratorAltitude += delta_z_lon.item(0)
-        self.integratorAirspeed += delta_z_lon.item(1)
-
-        # write error terms for next pass
-        self.errorSideslipD1 = sideslip_error
-        self.errorCourseD1 = course_error
-        self.errorAltitudeD1 = altitude_error
-        self.errorAirspeedD1 = airspeed_error
+        ## pitch angle
+        sin_gamma_c = h_des_dot / state.Va + ( (self.k_T - self.k_D) * E_K_tilde + (self.k_T + self.k_D) * E_P_tilde ) / ( 2 * MAV.mass * MAV.gravity * state.Va ) 
+            
+        sin_gamma_c_sat = saturate(sin_gamma_c, -np.sin(self.AP.max_pitch), np.sin(self.AP.max_pitch))
+        # theta_c - alpha = gamma_a
+        # - gamma_a is the air mass referenced flight path angle.  When wind velocity
+        # - is 0, gamma = gamma_a.
+        theta_c = state.alpha + np.arcsin(sin_gamma_c_sat)
+        
+        # deal with steady-state error
+        theta_c += self.pitch_correction_from_altitude.update(cmd.altitude_command, state.altitude)
+        elevator = self.pitch_from_elevator.update(theta_c, state.theta, state.q)
 
         # construct control outputs and commanded states
-        delta = MsgDelta(elevator=u_lon_sat.item(0),
+        self.delta_t_d1 = throttle
+        delta = MsgDelta(elevator=elevator,
                          aileron=u_lat_sat.item(0),
                          rudder=u_lat_sat.item(1),
-                         throttle=u_lon_sat.item(1))
+                         throttle=throttle)
         self.commanded_state.altitude = cmd.altitude_command 
         self.commanded_state.Va = cmd.airspeed_command
         self.commanded_state.phi = 0  # phi_c
-        self.commanded_state.theta = 0  # theta_c
+        self.commanded_state.theta = theta_c
         self.commanded_state.chi = cmd.course_command
         
         return delta, self.commanded_state

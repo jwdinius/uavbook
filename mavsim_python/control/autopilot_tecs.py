@@ -17,62 +17,58 @@ from control.pd_control_with_rate import PDControlWithRate
 from message_types.msg_state import MsgState
 from message_types.msg_delta import MsgDelta
 from scipy.interpolate import RegularGridInterpolator
+from importlib import import_module
 
-USE_TRUTH=True
 MAX_LUT_ERROR_SQ=5e-2
-
-if USE_TRUTH:
-    import parameters.control_parameters as AP
-else:
-    import parameters.control_parameters_estimator as AP
 
 
 def obj_fn(_delta_t, _airspeed, _T_des):
     return (calculate_motor_thrust(_delta_t, _airspeed) - _T_des)**2
 
 class Autopilot:
-    def __init__(self, ts_control):
+    def __init__(self, ts_control, use_truth=False):
+        if use_truth:
+            self.AP = import_module("parameters.control_parameters")
+        else:
+            self.AP = import_module("parameters.control_parameters_estimator")
         # instantiate lateral controllers
         self.roll_from_aileron = PDControlWithRate(
-                        kp=AP.roll_kp,
-                        kd=AP.roll_kd,
-                        limit=np.radians(45))
+                        kp=self.AP.roll_kp,
+                        kd=self.AP.roll_kd,
+                        limit=self.AP.max_aileron)
         self.course_from_roll = PIControl(
-                        kp=AP.course_kp,
-                        ki=AP.course_ki,
+                        kp=self.AP.course_kp,
+                        ki=self.AP.course_ki,
                         Ts=ts_control,
-                        limit=np.radians(30))
-        # self.yaw_damper = TransferFunction(
-        #                 num=np.array([[AP.yaw_damper_kr, 0]]),
-        #                 den=np.array([[1, AP.yaw_damper_p_wo]]),
-        #                 Ts=ts_control)
+                        limit=self.AP.max_roll)
         self.yaw_damper = TFControl(
-                        k=AP.yaw_damper_kr,
+                        k=self.AP.yaw_damper_kr,
                         n0=0.0,
                         n1=1.0,
-                        d0=AP.yaw_damper_p_wo,
+                        d0=self.AP.yaw_damper_p_wo,
                         d1=1,
-                        Ts=ts_control)
+                        Ts=ts_control,
+                        limit=self.AP.max_rudder)
 
         # instantiate TECS controllers
-        self.throttle_correction_from_airspeed = PIControl(
-                        kp=AP.throttle_correction_kp_tecs,
-                        ki=AP.throttle_correction_ki_tecs,
-                        Ts=ts_control,
-                        limit=AP.throttle_correction_limit)
-        self.pitch_correction_from_altitude = PIControl(
-                        kp=AP.altitude_correction_kp_tecs,
-                        ki=AP.altitude_correction_ki_tecs,
-                        Ts=ts_control,
-                        limit=AP.altitude_correction_limit)
+        self.k_T = self.AP.k_T_tecs 
+        self.k_D = self.AP.k_D_tecs 
+        self.k_Va = self.AP.k_Va_tecs 
+        self.k_h = self.AP.k_h_tecs
         self.pitch_from_elevator = PDControlWithRate(
-                        kp=AP.pitch_kp_tecs,
-                        kd=AP.pitch_kd_tecs,
-                        limit=AP.max_elevator)
-        self.k_T = AP.k_T_tecs 
-        self.k_D = AP.k_D_tecs 
-        self.k_Va = AP.k_Va_tecs 
-        self.k_h = AP.k_h_tecs
+                        kp=self.AP.pitch_kp_tecs,
+                        kd=self.AP.pitch_kd_tecs,
+                        limit=self.AP.max_elevator)
+        self.throttle_correction_from_airspeed = PIControl(
+                        kp=self.AP.throttle_correction_kp_tecs,
+                        ki=self.AP.throttle_correction_ki_tecs,
+                        Ts=ts_control,
+                        limit=self.AP.throttle_correction_limit)
+        self.pitch_correction_from_altitude = PIControl(
+                        kp=self.AP.altitude_correction_kp_tecs,
+                        ki=self.AP.altitude_correction_ki_tecs,
+                        Ts=ts_control,
+                        limit=self.AP.altitude_correction_limit)
 
         
         with open(os.environ["UAVBOOK_HOME"] + "/control/tecs_thrust_lut.txt", "r") as f:
@@ -89,12 +85,8 @@ class Autopilot:
         self.throttle_lut = RegularGridInterpolator((thrust_x, airspeed_x), Z, method='cubic')
 
         self.delta_t_d1 = 0.5
-        self.theta_c_max = AP.max_elevator
         self.Ts = ts_control
         self.commanded_state = MsgState()
-
-    def set_trim_input(self, trim_input):
-        self._trim_input = trim_input
 
     def update(self, cmd, state):
         ###### TODO ######
@@ -107,8 +99,8 @@ class Autopilot:
         chi_c = wrap(cmd.course_command, state.chi)
         phi_c = self.saturate(  # why saturate when the controller will?
             cmd.phi_feedforward + self.course_from_roll.update(chi_c, state.chi),
-            -np.radians(45),
-            np.radians(45)
+            -self.AP.max_roll,
+            self.AP.max_roll
         )
         delta.aileron = self.roll_from_aileron.update(phi_c, state.phi, state.p)
         delta.rudder = self.yaw_damper.update(state.r)
@@ -157,7 +149,7 @@ class Autopilot:
         ## pitch angle
         sin_gamma_c = h_des_dot / state.Va + ( (self.k_T - self.k_D) * E_K_tilde + (self.k_T + self.k_D) * E_P_tilde ) / ( 2 * MAV.mass * MAV.gravity * state.Va ) 
             
-        sin_gamma_c_sat = self.saturate(sin_gamma_c, -np.sin(self.theta_c_max), np.sin(self.theta_c_max))
+        sin_gamma_c_sat = self.saturate(sin_gamma_c, -np.sin(self.AP.max_pitch), np.sin(self.AP.max_pitch))
         # theta_c - alpha = gamma_a
         # - gamma_a is the air mass referenced flight path angle.  When wind velocity
         # - is 0, gamma = gamma_a.
@@ -165,7 +157,6 @@ class Autopilot:
         
         # deal with steady-state error
         theta_c += self.pitch_correction_from_altitude.update(cmd.altitude_command, state.altitude)
-            
         delta.elevator = self.pitch_from_elevator.update(theta_c, state.theta, state.q)
         
         # construct output and commanded states
