@@ -286,26 +286,30 @@ class MavDynamics:
         return x_dot
 
     def _update_velocity_data(self, wind=np.zeros((6,1))):
-        steady_state = wind[0:3]
-        gust = wind[3:6]
-        
-        # convert wind vector from world to body frame (self._wind = ?)
-        R_b2v = Quaternion2Rotation(self._state[6:10])
-        self._wind = steady_state + R_b2v @ gust 
+        try:
+            steady_state = wind[0:3]
+            gust = wind[3:6]
+            
+            # convert wind vector from world to body frame (self._wind = ?)
+            R_b2v = Quaternion2Rotation(self._state[6:10])
+            self._wind = steady_state + R_b2v @ gust 
 
-        # velocity vector relative to the airmass ([ur , vr, wr]= ?)
-        wind_b = R_b2v.T @ self._wind
-        airspeed_vector = self._state[3:6] - wind_b
-        ur, vr, wr = airspeed_vector
+            # velocity vector relative to the airmass ([ur , vr, wr]= ?)
+            wind_b = R_b2v.T @ self._wind
+            airspeed_vector = self._state[3:6] - wind_b
+            ur, vr, wr = airspeed_vector
 
-        # compute airspeed (self._Va = ?)
-        self._Va = np.linalg.norm(airspeed_vector) 
+            # compute airspeed (self._Va = ?)
+            self._Va = np.linalg.norm(airspeed_vector) 
 
-        # compute angle of attack (self._alpha = ?)
-        self._alpha = np.arctan2(float(wr), float(ur))
-        
-        # compute sideslip angle (self._beta = ?)
-        self._beta = np.arcsin(float(vr) / self._Va)
+            # compute angle of attack (self._alpha = ?)
+            self._alpha = np.arctan2(float(wr), float(ur))
+            
+            # compute sideslip angle (self._beta = ?)
+            self._beta = np.arcsin(float(vr) / self._Va)
+        except ValueError:
+            print(self._state)
+            return
 
     def _forces_moments(self, delta):
         """
