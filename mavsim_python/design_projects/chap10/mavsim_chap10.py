@@ -12,6 +12,7 @@ import pyqtgraph as pg
 import parameters.simulation_parameters as SIM
 from models.mav_dynamics_sensors import MavDynamics
 from models.wind_simulation import WindSimulation
+from models.trim import compute_trim
 from control.autopilot import Autopilot
 from estimation.observer import Observer
 from planning.path_follower import PathFollower
@@ -44,11 +45,24 @@ if DATA_PLOTS:
 
 
 # initialize elements of the architecture
-wind = WindSimulation(SIM.ts_simulation)
-mav = MavDynamics(SIM.ts_simulation)
-autopilot = Autopilot(SIM.ts_simulation)
-observer = Observer(SIM.ts_simulation)
+wind = WindSimulation(SIM.ts_simulation, steady_state = np.array([[3., -3, 0]]).T)
+#wind = WindSimulation(SIM.ts_simulation)
+mav = MavDynamics(SIM.ts_simulation, use_biases=False, debug=False)
+autopilot = Autopilot(SIM.ts_simulation, use_truth=False)
+observer = Observer(SIM.ts_simulation, initial_measurements=mav.sensors())
 path_follower = PathFollower()
+
+Va = 25.
+gamma = np.radians(0)
+trim_state, trim_input = compute_trim(mav, Va, gamma)
+mav._state = trim_state  # set the initial state of the mav to the trim state
+mav._update_true_state()
+
+#true_state_copy = deepcopy(mav.true_state)
+#autopilot.set_trim_state(true_state_copy)
+#autopilot.set_trim_input(trim_input)
+
+delta_prev = trim_input
 
 # path definition
 from message_types.msg_path import MsgPath
@@ -56,9 +70,9 @@ path = MsgPath()
 path.type = 'line'
 #path.type = 'orbit'
 if path.type == 'line':
-    path.line_origin = np.array([[0.0, 0.0, -100.0]]).T
+    path.line_origin = np.array([[0.0, 0.0, -100.0]]).T  # == r
     path.line_direction = np.array([[0.5, 1.0, 0.0]]).T
-    path.line_direction = path.line_direction / np.linalg.norm(path.line_direction)
+    path.line_direction = path.line_direction / np.linalg.norm(path.line_direction)  # == q
 elif path.type == 'orbit':
     path.orbit_center = np.array([[0.0, 0.0, -100.0]]).T  # center of the orbit
     path.orbit_radius = 300.0  # radius of the orbit
@@ -73,6 +87,7 @@ print("Press 'Esc' to exit...")
 while sim_time < end_time:
     # -------observer-------------
     measurements = mav.sensors()  # get sensor measurements
+    observer.set_elevator(delta_prev.elevator)
     estimated_state = observer.update(measurements)  # estimate states from measurements
 
     # -------path follower-------------
@@ -81,9 +96,10 @@ while sim_time < end_time:
 
     # -------autopilot-------------
     delta, commanded_state = autopilot.update(autopilot_commands, estimated_state)
+    delta_prev = delta
 
     # -------physical system-------------
-    current_wind = wind.update()  # get the new wind vector
+    current_wind = wind.update(mav.true_state.altitude, mav.true_state.Va)  # get the new wind vector
     mav.update(delta, current_wind)  # propagate the MAV dynamics
 
         # ------- animation -------
