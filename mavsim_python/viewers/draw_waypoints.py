@@ -55,9 +55,9 @@ class DrawWaypoints:
         dubins_path = DubinsParameters()
         for j in range(0, waypoints.num_waypoints-1):
             dubins_path.update(
-                waypoints.ned[:, j:j+1],
+                waypoints.ned[:, j],
                 waypoints.course.item(j),
-                waypoints.ned[:, j+1:j+2],
+                waypoints.ned[:, j+1],
                 waypoints.course.item(j+1),
                 radius)
             if j == 0:
