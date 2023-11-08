@@ -16,10 +16,10 @@ sys.path.append('..')
 class DubinsParameters:
 
     def update(self, ps, chis, pe, chie, R):
-         self.p_s = ps
-         self.chi_s = chis
-         self.p_e = pe
-         self.chi_e = chie
+         self.p_s = ps.reshape((3, 1))
+         self.chi_s = float(chis)
+         self.p_e = pe.reshape((3, 1))
+         self.chi_e = float(chie)
          self.radius = R
          self.compute_parameters()
 
@@ -30,19 +30,19 @@ class DubinsParameters:
         chie = self.chi_e
         R = self.radius
         ell = np.linalg.norm(ps[0:2] - pe[0:2])
-
+        
         ##### TODO #####
         if ell < 2 * R:
             print('Error in Dubins Parameters: The distance between nodes must be larger than or equal to 2R.')
         else:
             # compute start and end circles
-            crs = ps + R * rotz(0.5 * np.pi) @ np.array([np.cos(chis), np.sin(chis), 0]).T
-            cls = ps + R * rotz(-0.5 * np.pi) @ np.array([np.cos(chis), np.sin(chis), 0]).T
-            cre = pe + R * rotz(0.5 * np.pi) @ np.array([np.cos(chie), np.sin(chie), 0]).T
-            cle = pe + R * rotz(-0.5 * np.pi) @ np.array([np.cos(chie), np.sin(chie), 0]).T
+            crs = ps + R * rotz(0.5 * np.pi) @ np.array([[np.cos(chis)], [np.sin(chis)], [0]])
+            cls = ps + R * rotz(-0.5 * np.pi) @ np.array([[np.cos(chis)], [np.sin(chis)], [0]])
+            cre = pe + R * rotz(0.5 * np.pi) @ np.array([[np.cos(chie)], [np.sin(chie)], [0]])
+            cle = pe + R * rotz(-0.5 * np.pi) @ np.array([[np.cos(chie)], [np.sin(chie)], [0]])
+                                            
+            north = np.array([[1.], [0], [0]])
 
-            north = np.array([1., 0, 0]).T
-            
             # compute L1
             vartheta = compute_vartheta(cre, crs)
             l = np.linalg.norm(crs - cre)
@@ -51,14 +51,20 @@ class DubinsParameters:
             # compute L2
             vartheta = compute_vartheta(cle, crs)
             l = np.linalg.norm(crs - cle)
-            vartheta2 = vartheta - 0.5*np.pi + np.arcsin(2*R / l) 
-            L2 = np.sqrt(l**2 - 4*R**2) + R * mod( 2 * np.pi + mod(vartheta2) - mod(chis - 0.5*np.pi) ) + R * mod( 2 * np.pi + mod(vartheta2 + np.pi) - mod(chie + 0.5*np.pi) )
+            if 2 * R > l:
+                L2 = np.inf
+            else:
+                vartheta2 = vartheta - 0.5*np.pi + np.arcsin(2*R / l)
+                L2 = np.sqrt(l**2 - 4*R**2) + R * mod( 2 * np.pi + mod(vartheta2) - mod(chis - 0.5*np.pi) ) + R * mod( 2 * np.pi + mod(vartheta2 + np.pi) - mod(chie + 0.5*np.pi) )
 
             # compute L3
             vartheta = compute_vartheta(cre, cls)
             l = np.linalg.norm(cre - cls)
-            vartheta2 = np.arccos(2*R / l) 
-            L3 = np.sqrt(l**2 - 4*R**2) + R * mod( 2 * np.pi + mod(chis + 0.5*np.pi) - mod(vartheta + vartheta2) ) + R * mod( 2 * np.pi + mod(chie - 0.5*np.pi) - mod(vartheta + vartheta2 - np.pi) )
+            if 2 * R > l:
+                L3 = np.inf
+            else:
+                vartheta2 = np.arccos(2*R / l)
+                L3 = np.sqrt(l**2 - 4*R**2) + R * mod( 2 * np.pi + mod(chis + 0.5*np.pi) - mod(vartheta + vartheta2) ) + R * mod( 2 * np.pi + mod(chie - 0.5*np.pi) - mod(vartheta + vartheta2 - np.pi) )
 
             # compute L4
             vartheta = compute_vartheta(cle, cls)
@@ -69,6 +75,7 @@ class DubinsParameters:
             L = np.min([L1, L2, L3, L4])
             min_idx = np.argmin([L1, L2, L3, L4])
 
+            # All starting and ending angles assume clockwise (positive) orientation
             if min_idx == 0:
                 cs = crs
                 lams = 1
@@ -79,25 +86,29 @@ class DubinsParameters:
                 z1 = cs + R * rotz(-0.5*np.pi) @ q1
                 z2 = ce + R * rotz(-0.5*np.pi) @ q1
             elif min_idx == 1:
+                vartheta = compute_vartheta(cle, crs)
                 cs = crs
                 lams = 1
                 ce = cle
                 lame = -1
                 l = np.linalg.norm(ce - cs)
-                vartheta2 = vartheta - 0.5*np.pi + np.arcsin(2 * R / l)
+                vartheta2 = mod(vartheta - 0.5*np.pi + np.arcsin(2 * R / l))
                 q1 = rotz(vartheta2 + 0.5*np.pi) @ north
                 z1 = cs + R * rotz(vartheta2) @ north
                 z2 = ce + R * rotz(vartheta2 + np.pi) @ north
             elif min_idx == 2:
+                vartheta = compute_vartheta(cre, cls)
                 cs = cls
                 lams = -1
                 ce = cre
                 lame = 1
+                l = np.linalg.norm(ce - cs)
                 vartheta2 = np.arccos(2 * R / l)
                 q1 = rotz(vartheta + vartheta2 - 0.5*np.pi) @ north
                 z1 = cs + R * rotz(vartheta + vartheta2) @ north
                 z2 = ce + R * rotz(vartheta + vartheta2 - np.pi) @ north
             elif min_idx == 3:
+                vartheta = compute_vartheta(cle, cls)
                 cs = cls
                 lams = -1
                 ce = cle
@@ -106,16 +117,29 @@ class DubinsParameters:
                 q1 /= np.linalg.norm(q1)
                 z1 = cs + R * rotz(0.5*np.pi) @ q1
                 z2 = ce + R * rotz(0.5*np.pi) @ q1
+            
             self.length = L
             self.center_s = cs
             self.dir_s = lams
             self.center_e = ce
             self.dir_e = lame
-            self.r1 = z1
+            self.r1 = z1  # line segment start
             self.n1 = q1
-            self.r2 = z2
+            self.r2 = z2  # line segment end
             self.r3 = pe
             self.n3 = rotz(chie) @ north
+            start_arc_s = ps - cs
+            start_arc_e = z1 - cs 
+            end_arc_s = z2 - ce
+            end_arc_e = pe - ce
+            self.start_arc_angles = [
+                mod(np.arctan2(start_arc_s.item(1), start_arc_s.item(0))),
+                mod(np.arctan2(start_arc_e.item(1), start_arc_e.item(0)))
+            ]
+            self.end_arc_angles = [
+                mod(np.arctan2(end_arc_s.item(1), end_arc_s.item(0))),
+                mod(np.arctan2(end_arc_e.item(1), end_arc_e.item(0)))
+            ]
 
     def compute_points(self):
         ##### TODO ##### - uncomment lines and remove last line
@@ -223,10 +247,10 @@ def compute_vartheta(pe, ps, method='v1'):
 
 def compute_vartheta_v1(pe, ps):
     d = pe - ps
-    return float(np.arctan2(d.item(1), d.item(0)))
+    return mod(float(np.arctan2(d.item(1), d.item(0))))
 
 def compute_vartheta_v2(pe, ps):
     d = pe - ps
     north = np.array([1., 0, 0]).T
-    return float(np.arccos(north.dot(d) / np.linalg.norm(d)))
+    return mod(float(np.arccos(north.dot(d) / np.linalg.norm(d))))
 

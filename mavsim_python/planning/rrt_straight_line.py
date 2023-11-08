@@ -10,8 +10,8 @@ import numpy as np
 from message_types.msg_waypoints import MsgWaypoints
 from viewers.planner_viewer import PlannerViewer
 
-SAFETY_RADIUS = 3  # meters
-SAFETY_HEIGHT = 3  # meters
+SAFETY_RADIUS = 1  # meters
+SAFETY_HEIGHT = 1  # meters
 
 SEED = 12021
 rng = np.random.default_rng(SEED)
@@ -20,6 +20,7 @@ class RRTStraightLine:
     def __init__(self, app, show_planner=True):
         self.segment_length = 300 # standard length of path segments
         self.show_planner = show_planner
+        self.planner_viewer = None
         if show_planner:
             self.planner_viewer = PlannerViewer(app)
 
@@ -38,17 +39,22 @@ class RRTStraightLine:
         finished = False
         while not finished:
             finished = self.extend_tree(tree, end_pose, Va, world_map)
-            self.process_app()
             # existFeasiblePath (to goal)
+            if self.planner_viewer:
+                self.planner_viewer.draw_tree_and_map(world_map, tree, MsgWaypoints(), MsgWaypoints(), radius)
+                self.planner_viewer.process_app()
             if finished:
                 node_parent = len(tree.cost)-1
-                node_cost = tree.cost[-1] + distance(tree.ned[-1], end_pose)
+                node_cost = tree.cost[-1] + distance(tree.ned[:, -1].reshape((3, 1)), end_pose)
                 tree.add(ned=end_pose, airspeed=Va, course=np.inf, cost=node_cost, parent=node_parent, connect_to_goal=1)
 
         # find path with minimum cost to end_node
         waypoints_not_smooth = find_minimum_path(tree)
         # smooth path
         waypoints = smooth_path(waypoints_not_smooth, world_map)
+        if self.planner_viewer:
+            self.planner_viewer.draw_tree_and_map(world_map, tree, waypoints_not_smooth, waypoints, radius)
+            self.planner_viewer.process_app()
         return waypoints
 
     def extend_tree(self, tree, end_pose, Va, world_map):
@@ -86,23 +92,31 @@ class RRTStraightLine:
 
         return (connect_to_goal == 1)
         
-    def process_app(self):
-        self.planner_viewer.process_app()
-
-def waypoint_is_in_tree(point, vertices):
-    for v in vertices:
-        if np.allclose(point.ned, v.ned):
-            return True
-    return False
-
 def smooth_path(waypoints, world_map):
-
     ##### TODO #####
     # smooth the waypoint path
-    #smooth = [0]  # add the first waypoint
+    # add the first waypoint
+    smooth_waypoints = MsgWaypoints()
+    smooth_waypoints.type = waypoints.type
+    smooth_waypoints.add(ned=waypoints.ned[:, 0].reshape((3, 1)), airspeed=waypoints.airspeed[0], course=np.inf, cost=0, parent=-1, connect_to_goal=1)
+    smooth = [0]
     
+    i, j = 0, 1
     # construct smooth waypoint path
-    smooth_waypoints = waypoints
+    while j < waypoints.ned.shape[1] - 1:
+        w_s = waypoints.ned[:, smooth[i]].reshape((3, 1))
+        w_plus = waypoints.ned[:, j+1].reshape((3, 1))
+        if collision(w_s, w_plus, world_map):
+            smooth.append(j)
+            i += 1
+        j += 1
+    smooth.append(waypoints.ned.shape[1] - 1)
+
+    for i in range(len(smooth)-1):
+        idx = smooth[i+1]
+        idxm1 = smooth[i]
+        cost = distance(waypoints.ned[:, idxm1].reshape((3, 1)), waypoints.ned[:, idx].reshape((3, 1)))
+        smooth_waypoints.add(ned=waypoints.ned[:, idx].reshape((3, 1)), airspeed=waypoints.airspeed[idx], course=waypoints.course[idx], cost=cost, parent=idxm1, connect_to_goal=1) 
 
     return smooth_waypoints
 
@@ -221,22 +235,3 @@ def point_is_on_line_segment(ps, pe, qp):
     t = float(vq.dot(v) / v.dot(v) )
     return (t >= 0 and t <= 1)
 
-
-def height_above_ground(world_map, point):
-    # find the altitude of point above ground level
-    
-    ##### TODO #####
-    h_agl = -point.item(2)
-    return h_agl
-
-def points_along_path(start_pose, end_pose, N):
-    # returns points along path separated by Del
-    points = None
-    return points
-
-
-def column(A, i):
-    # extracts the ith column of A and return column vector
-    tmp = A[:, i]
-    col = tmp.reshape(A.shape[0], 1)
-    return col
