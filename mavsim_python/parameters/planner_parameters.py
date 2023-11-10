@@ -20,7 +20,8 @@ R_min = Va0**2. / MAV.gravity / np.tan(phi_max)
 
 # create random city map
 city_width      = 2000.  # the city is of size (width)x(width)
-building_height = 300.   # maximum height of buildings
+#building_height = 300.   # maximum height of buildings
+building_height = 1.   # maximum height of buildings (Chapter 13)
 num_blocks      = 5    # number of blocks in city
 street_width    = .8   # percent of block that is street.
 

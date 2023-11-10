@@ -19,7 +19,7 @@ from message_types.msg_delta import MsgDelta
 
 import parameters.aerosonde_parameters as MAV
 import parameters.sensor_parameters as SENSOR
-from tools.rotations import Quaternion2Rotation, Quaternion2Euler, Euler2Rotation
+from tools.rotations import Quaternion2Rotation, Quaternion2Euler
 from scipy.optimize import minimize
 
 class MavDynamics:

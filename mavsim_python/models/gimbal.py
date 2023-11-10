@@ -19,17 +19,20 @@ class Gimbal:
         # desired inertial frame vector points down
         
         # rotate line-of-sight vector into body frame and normalize
-        
-        ell = np.array([[0],[0],[0]])
-        return( self.pointAlongVector(ell, mav.camera_az, mav.camera_el) )
+        p_obj_i = np.array([[mav.north], [mav.east], [0]])
+        return self.pointAtPosition(mav, p_obj_i)
 
     def pointAtPosition(self, mav, target_position):
         ###### TODO #######
         # line-of-sight vector in the inertial frame
+        p_obj_i = target_position.reshape((3, 1))
+        p_mav_i = np.array([[mav.north], [mav.east], [-mav.altitude]])
+        l_i = p_obj_i - p_mav_i
         
         # rotate line-of-sight vector into body frame and normalize
-        ell = np.array([[0],[0],[0]])
-        return( self.pointAlongVector(ell, mav.camera_az, mav.camera_el) )
+        R_b2i = Euler2Rotation(mav.phi, mav.theta, mav.psi)
+        l_r = R_b2i.T @ l_i / np.linalg.norm(l_i)
+        return( self.pointAlongVector(l_r, mav.camera_az, mav.camera_el) )
 
     def pointAlongVector(self, ell, azimuth, elevation):
         # point gimbal so that optical axis aligns with unit vector ell
@@ -38,12 +41,10 @@ class Gimbal:
 
         ##### TODO #####
         # compute control inputs to align gimbal
-        
+        c_az = np.arctan2(float(ell.item(1)), float(ell.item(0)))
+        c_el = np.arcsin(-float(ell.item(2)))
         # proportional control for gimbal
-        u_az = 0
-        u_el = 0
+        u_az = CAM.k_az * (c_az - azimuth)
+        u_el = CAM.k_el * (c_el - elevation)
         return( np.array([[u_az], [u_el]]) )
-
-
-
 

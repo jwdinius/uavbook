@@ -6,17 +6,20 @@ mavsim_python
 """
 import sys
 sys.path.append('../..')
+import numpy as np
 import pyqtgraph as pg
 import parameters.simulation_parameters as SIM
 import parameters.planner_parameters as PLAN
 from models.wind_simulation import WindSimulation
 from models.camera import Camera
+from models.trim import compute_trim
 from models.target_dynamics import TargetDynamics
 from models.mav_dynamics_camera import MavDynamics
+from models.mav_dynamics_sensors import MavDynamics as MavDynamicsSensors
 from models.gimbal import Gimbal
 from control.autopilot import Autopilot
 from estimation.observer import Observer
-from estimation.geolocation import Geolocation
+#from estimation.geolocation import Geolocation
 from viewers.geolocation_viewer import GeolocationViewer
 from planning.path_planner import PathPlanner
 from planning.path_follower import PathFollower
@@ -27,6 +30,7 @@ from viewers.camera_viewer import CameraViewer
 from message_types.msg_world_map import MsgWorldMap
 from message_types.msg_waypoints import MsgWaypoints
 from tools.quit_listener import QuitListener
+
 
 quitter = QuitListener()
 
@@ -60,31 +64,47 @@ if CAMERA_VIEW:
 
 # initialize elements of the architecture
 world_map = MsgWorldMap()
-mav = MavDynamics(SIM.ts_simulation)
+wind = WindSimulation(SIM.ts_simulation, steady_state = np.array([[3., -3, 0]]).T)
+mav = MavDynamics(SIM.ts_simulation, use_biases=False, debug=False)
+mav_trim = MavDynamicsSensors(SIM.ts_simulation, use_biases=False, debug=False)
+autopilot = Autopilot(SIM.ts_simulation, use_truth=False)
+observer = Observer(SIM.ts_simulation, initial_measurements=mav.sensors())
 gimbal = Gimbal()
 camera = Camera()
 target = TargetDynamics(SIM.ts_simulation, world_map)
-wind = WindSimulation(SIM.ts_simulation)
-autopilot = Autopilot(SIM.ts_simulation)
-observer = Observer(SIM.ts_simulation)
 path_follower = PathFollower()
 path_manager = PathManager()
-path_planner = PathPlanner(app)
+path_planner = PathPlanner(app, planner_flag="simple_dubins")
 
 # initialize the simulation time
 sim_time = SIM.start_time
 plot_timer = 0
 
+Va = PLAN.Va0
+gamma = np.radians(0)
+trim_state, trim_input = compute_trim(mav_trim, Va, gamma)
+mav._state[:13] = trim_state.reshape((13, 1))  # set the initial state of the mav to the trim state
+
+del mav_trim
+#building_width = PLAN.city_width / PLAN.num_blocks * (1 - PLAN.street_width)
+#mav._state[0] = PLAN.city_width / 2 - building_width 
+#mav._state[1] = PLAN.city_width / 2 + building_width
+mav._update_true_state()
+
 # main simulation loop
 print("Press Command-Q to exit...")
+delta_prev = trim_input
 while sim_time < SIM.end_time:
     # -------observer-------------
     measurements = mav.sensors()  # get sensor measurements
     camera.updateProjectedPoints(mav.true_state, target.position())
     pixels = camera.getPixels()
-    #estimated_state = observer.update(measurements)  # estimate states from measurements
-        # I occasionally get bad results with the observer.  true states seem to always work.
-    estimated_state = mav.true_state
+    observer.set_elevator(delta_prev.elevator)
+    estimated_state = observer.update(measurements)  # estimate states from measurements
+    estimated_state.camera_az = mav.true_state.camera_az
+    estimated_state.camera_el = mav.true_state.camera_el
+    # I occasionally get bad results with the observer.  true states seem to always work.
+    #estimated_state = mav.true_state
 
     # -------path planner - ----
     if path_manager.manager_requests_waypoints is True:
@@ -92,6 +112,7 @@ while sim_time < SIM.end_time:
 
     # -------path manager-------------
     path = path_manager.update(waypoints, PLAN.R_min, estimated_state)
+    waypoints.flag_waypoints_changed = False
 
     # -------path follower-------------
     autopilot_commands = path_follower.update(path, estimated_state)
@@ -106,7 +127,7 @@ while sim_time < SIM.end_time:
     delta.gimbal_el = gimbal_cmd.item(1)
 
     # -------physical system-------------
-    current_wind = wind.update()  # get the new wind vector
+    current_wind = wind.update(mav.true_state.altitude, mav.true_state.Va)  # get the new wind vector
     mav.update(delta, current_wind)  # propagate the MAV dynamics
     target.update()  # propagate the target dynamics
 
