@@ -3,6 +3,8 @@ mavsim_python
     - Chapter 5 assignment for Beard & McLain, PUP, 2012
     - Last Update:
         2/2/2019 - RWB
+        1/5/2023 - David L. Christiansen
+        7/13/2023 - RWB
 """
 from dotenv import load_dotenv
 load_dotenv()
@@ -19,9 +21,8 @@ from models.wind_simulation import WindSimulation
 from models.trim import compute_trim
 from models.compute_models import compute_model
 from tools.signals import Signals
-from tools.quit_listener import QuitListener
 
-quitter = QuitListener()
+#quitter = QuitListener()
 
 VIDEO = False
 PLOTS = True
@@ -104,8 +105,8 @@ while sim_time < end_time:
         video.update(sim_time)
         
     # -------Check to Quit the Loop-------
-    if quitter.check_quit():
-        break
+    # if quitter.check_quit():
+    #     break
 
     # -------increment time-------------
     sim_time += SIM.ts_simulation

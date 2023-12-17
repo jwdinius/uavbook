@@ -7,7 +7,7 @@
 
 [Princeton University Press, 2012](http://press.princeton.edu/titles/9632.html)
 
-[uavbook.pdf](https://drive.google.com/file/d/19xEFoIhGGz5ftc8r89Z6pHlUZHI3bPE4/view?usp=sharing)
+[uavbook.pdf](https://drive.google.com/file/d/1I3dwUmBBzwT_A1MlBk2XRl4clZ7RHuOQ/view?usp=share_link)
   This file is a work in progress.  The intent is that this file will eventually become a second edition to the book.  But beware, it has not been carefully proof read, and we continue to update it regularly.
 
 ## Lecture Material
@@ -118,7 +118,7 @@ The Kalman filters presented in the book are meant to be tutorial and are intend
     
     **Mason Peterson, 2022** [Quadplane Trajectory Tracker](https://github.com/mbpeterson70/quadplane_project)
     
-    **Dan Richards, 2022** [Unit Tests on several chapters](https://github.com/dcrich/MAV-Unit-Tests)
+   <!-- BROKEN LINK **Dan Richards, 2022** [Unit Tests on several chapters](https://github.com/dcrich/MAV-Unit-Tests) -->
     
     **John Morrell, 2022** [Eigenstructure Assignment](https://github.com/Tarnarmour/FlightDynamics_Eigenstructure/blob/main/README.md)
     

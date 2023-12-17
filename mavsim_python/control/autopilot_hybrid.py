@@ -230,7 +230,6 @@ class Autopilot:
         elif Tc > self.thrust_max:
             throttle = 1.
         else:
-            print(f"{Tc}, {state.Va}")
             throttle = self.throttle_lut((Tc, state.Va))
             if obj_fn(throttle, state.Va, Tc) > MAX_LUT_ERROR_SQ:
                 # lookup has unacceptable error, use previous value

@@ -4,7 +4,8 @@ mavsimPy
     - Update history:  
         12/27/2018 - RWB
         1/17/2019 - RWB
-        1/5/2023 - DLC
+        1/5/2023 - David L. Christiansen
+        7/13/2023 - RWB
 """
 from dotenv import load_dotenv
 load_dotenv()
@@ -15,9 +16,8 @@ import pyqtgraph as pg
 import parameters.simulation_parameters as SIM
 from viewers.mav_viewer import MavViewer
 from message_types.msg_state import MsgState
-from tools.quit_listener import QuitListener
 
-quitter = QuitListener()
+#quitter = QuitListener()
 
 # doesn't work, use kazam or similar
 VIDEO = False
@@ -72,8 +72,8 @@ while sim_time < end_time:
         video.update(sim_time)
     
     # -------Check to Quit the Loop-------
-    if quitter.check_quit():
-        break
+    # if quitter.check_quit():
+    #     break
 
 if VIDEO is True:
     video.update(sim_time)

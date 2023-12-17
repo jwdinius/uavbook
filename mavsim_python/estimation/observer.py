@@ -4,10 +4,13 @@ observer
     - Last Update:
         3/2/2019 - RWB
 """
-import sys
+from dotenv import load_dotenv
+load_dotenv()
 import numpy as np
 from scipy import stats
-sys.path.append('..')
+import os
+import sys
+sys.path.append(os.environ["UAVBOOK_HOME"])
 import parameters.aerosonde_parameters as MAV
 import parameters.control_parameters as CTRL
 import parameters.simulation_parameters as SIM

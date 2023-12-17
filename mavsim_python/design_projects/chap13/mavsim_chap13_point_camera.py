@@ -3,6 +3,8 @@ mavsim_python
     - Chapter 13 assignment for Beard & McLain, PUP, 2012
     - Last Update:
         3/30/2022 - RWB
+        1/5/2023 - David L. Christiansen
+        7/13/2023 - RWB
 """
 import sys
 sys.path.append('../..')
@@ -29,10 +31,8 @@ from viewers.mav_world_camera_viewer import MAVWorldCameraViewer
 from viewers.camera_viewer import CameraViewer
 from message_types.msg_world_map import MsgWorldMap
 from message_types.msg_waypoints import MsgWaypoints
-from tools.quit_listener import QuitListener
 
-
-quitter = QuitListener()
+#quitter = QuitListener()
 
 VIDEO = False
 DATA_PLOTS = False
@@ -147,8 +147,8 @@ while sim_time < SIM.end_time:
         app.processEvents()
 
     # -------Check to Quit the Loop-------
-    if quitter.check_quit():
-        break
+    # if quitter.check_quit():
+    #     break
 
     # -------increment time-------------
     sim_time += SIM.ts_simulation

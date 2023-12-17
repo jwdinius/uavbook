@@ -4,6 +4,8 @@ mavsimPy
     - Update history:  
         12/27/2018 - RWB
         1/17/2019 - RWB
+        1/5/2023 - David L. Christiansen
+        7/13/2023 - RWB
 """
 from dotenv import load_dotenv
 load_dotenv()
@@ -18,9 +20,8 @@ from models.wind_simulation import WindSimulation
 from viewers.mav_viewer import MavViewer
 from viewers.data_viewer import DataViewer
 from message_types.msg_delta import MsgDelta
-from tools.quit_listener import QuitListener
 
-quitter = QuitListener()
+#quitter = QuitListener()
 
 VIDEO = False
 PLOTS = True
@@ -81,8 +82,8 @@ while sim_time < end_time:
         video.update(sim_time)
         
     # -------Check to Quit the Loop-------
-    if quitter.check_quit():
-        break
+    # if quitter.check_quit():
+    #     break
 
     # -------increment time-------------
     sim_time += SIM.ts_simulation

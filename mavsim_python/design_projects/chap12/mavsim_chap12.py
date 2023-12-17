@@ -5,9 +5,17 @@ mavsim_python
         4/3/2019 - BGM
         2/27/2020 - RWB
         3/30/2022 - RWB
+        1/5/2023 - David L. Christiansen
+        7/13/2023 - RWB
 """
-import sys
-sys.path.append('../..')
+import os, sys
+from dotenv import load_dotenv
+load_dotenv()
+sys.path.append(os.environ["UAVBOOK_HOME"])
+# insert parent directory at beginning of python search path
+from pathlib import Path
+# use QuitListener for Linux or PC <- doesn't work on Mac
+#from tools.quit_listener import QuitListener
 import pyqtgraph as pg
 import parameters.simulation_parameters as SIM
 import parameters.planner_parameters as PLAN
@@ -22,9 +30,8 @@ from planning.path_manager import PathManager
 from planning.path_planner import PathPlanner
 from viewers.mav_world_viewer import MAVWorldViewer
 from viewers.data_viewer import DataViewer
-from tools.quit_listener import QuitListener
 from message_types.msg_world_map import MsgWorldMap
-quitter = QuitListener()
+#quitter = QuitListener()
 
 VIDEO = False
 DATA_PLOTS = True
@@ -124,8 +131,8 @@ while sim_time < SIM.end_time:
     sim_time += SIM.ts_simulation
 
     # -------Check to Quit the Loop-------
-    if quitter.check_quit():
-        break
+    # if quitter.check_quit():
+    #     break
 
 if VIDEO is True:
     video.close()

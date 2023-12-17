@@ -4,9 +4,13 @@ autopilot block for mavsim_python
     - Last Update:
         2/6/2019 - RWB
 """
-import sys
+from dotenv import load_dotenv
+load_dotenv()
+import os, sys
+# insert parent directory at beginning of python search path
+from pathlib import Path
+sys.path.append(os.environ["UAVBOOK_HOME"])
 import numpy as np
-sys.path.append('..')
 from tools.wrap import wrap
 from control.pi_control import PIControl
 from control.pd_control_with_rate import PDControlWithRate
